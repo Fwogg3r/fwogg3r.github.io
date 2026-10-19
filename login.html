@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Team Login · Fwogg3r</title>
+    <meta name="robots" content="noindex">
+    <link rel="stylesheet" href="members.css">
+    <script src="site.js" defer></script>
+  </head>
+  <body class="team-page">
+    <main>
+      <p><a href="index.html">&lt; back to fwogg3r.com</a></p>
+      <h1>Team login</h1>
+      <p class="hint">For team members with an @fwogg3r.com email only.</p>
+
+      <div class="card">
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" id="tab-signin" aria-selected="true">Sign in</button>
+          <button type="button" role="tab" id="tab-create" aria-selected="false">Create account</button>
+        </div>
+
+        <form id="auth-form" novalidate>
+          <label for="email">Email</label>
+          <input id="email" type="email" autocomplete="username" placeholder="you@fwogg3r.com" required>
+
+          <label for="password">Password</label>
+          <input id="password" type="password" autocomplete="current-password" required minlength="8">
+
+          <div id="confirm-wrap" hidden>
+            <label for="confirm">Confirm password</label>
+            <input id="confirm" type="password" autocomplete="new-password" minlength="8">
+            <p class="hint">At least 8 characters. We'll email you a link to confirm your address.</p>
+          </div>
+
+          <button class="btn block" type="submit" id="submit">Sign in</button>
+        </form>
+
+        <button type="button" class="linkish" id="forgot">Forgot password?</button>
+        <button type="button" class="linkish" id="resend" hidden>Resend verification email</button>
+
+        <div id="msg" class="msg" role="status" aria-live="polite"></div>
+      </div>
+    </main>
+
+    <script type="module">
+      import {
+        createUserWithEmailAndPassword,
+        signInWithEmailAndPassword,
+        sendEmailVerification,
+        sendPasswordResetEmail,
+        signOut,
+      } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+      import { auth, configured, isAllowedEmail, isMember, ALLOWED_DOMAIN } from "./auth.js";
+
+      const $ = (id) => document.getElementById(id);
+      const form = $("auth-form"), email = $("email"), password = $("password"), confirm = $("confirm");
+      const submit = $("submit"), msg = $("msg"), resend = $("resend");
+      let mode = "signin";
+
+      const allowedNext = ["members.html", "billing.html"];
+      const nextParam = new URLSearchParams(location.search).get("next");
+      const next = allowedNext.includes(nextParam) ? nextParam : "members.html";
+
+      function show(text, kind = "error") { msg.textContent = text; msg.className = "msg " + kind; }
+      function clear() { msg.textContent = ""; msg.className = "msg"; }
+
+      function setMode(m) {
+        mode = m;
+        $("tab-signin").setAttribute("aria-selected", String(m === "signin"));
+        $("tab-create").setAttribute("aria-selected", String(m === "create"));
+        $("confirm-wrap").hidden = m !== "create";
+        $("forgot").hidden = m !== "signin";
+        password.autocomplete = m === "create" ? "new-password" : "current-password";
+        submit.textContent = m === "create" ? "Create account" : "Sign in";
+        resend.hidden = true;
+        clear();
+      }
+      $("tab-signin").addEventListener("click", () => setMode("signin"));
+      $("tab-create").addEventListener("click", () => setMode("create"));
+
+      function friendly(err) {
+        const c = err && err.code;
+        if (c === "auth/email-already-in-use") return "An account with that email already exists. Try signing in.";
+        if (c === "auth/invalid-credential" || c === "auth/wrong-password" || c === "auth/user-not-found")
+          return "Email or password is incorrect.";
+        if (c === "auth/weak-password") return "Please choose a stronger password (at least 8 characters).";
+        if (c === "auth/too-many-requests") return "Too many attempts. Please wait a few minutes and try again.";
+        if (c === "auth/network-request-failed") return "Network error. Check your connection and try again.";
+        return "Something went wrong. Please try again.";
+      }
+
+      function checkEmail() {
+        const v = email.value.trim();
+        if (!isAllowedEmail(v)) {
+          show("Only @" + ALLOWED_DOMAIN + " email addresses can sign in or create an account.");
+          return null;
+        }
+        return v;
+      }
+
+      if (!configured) {
+        show("Team sign-in isn't set up yet. Please check back soon.");
+        submit.disabled = true;
+      }
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (!configured) return;
+        clear();
+        const addr = checkEmail();
+        if (!addr) return;
+
+        submit.disabled = true;
+        try {
+          if (mode === "create") {
+            if (password.value.length < 8) { show("Password must be at least 8 characters."); return; }
+            if (password.value !== confirm.value) { show("Passwords don't match."); return; }
+            const cred = await createUserWithEmailAndPassword(auth, addr, password.value);
+            await sendEmailVerification(cred.user);
+            await signOut(auth);
+            setMode("signin");
+            email.value = addr;
+            show("Account created. Check " + addr + " for a verification link, then sign in here.", "ok");
+          } else {
+            const cred = await signInWithEmailAndPassword(auth, addr, password.value);
+            await cred.user.reload();
+            if (!isMember(auth.currentUser)) {
+              show("Please verify your email first. Check your inbox for the link we sent, then sign in again.");
+              resend.hidden = false;
+              return;
+            }
+            location.replace(next);
+          }
+        } catch (err) {
+          show(friendly(err));
+        } finally {
+          submit.disabled = false;
+        }
+      });
+
+      resend.addEventListener("click", async () => {
+        if (!auth || !auth.currentUser) return;
+        try {
+          await sendEmailVerification(auth.currentUser);
+          await signOut(auth);
+          resend.hidden = true;
+          show("Verification email sent. Click the link in it, then sign in again.", "ok");
+        } catch (err) {
+          show(friendly(err));
+        }
+      });
+
+      $("forgot").addEventListener("click", async () => {
+        if (!configured) return;
+        clear();
+        const addr = checkEmail();
+        if (!addr) return;
+        try {
+          await sendPasswordResetEmail(auth, addr);
+        } catch (_) { /* don't reveal whether the account exists */ }
+        show("If an account exists for " + addr + ", a password reset link is on its way.", "ok");
+      });
+    </script>
+  </body>
+</html>

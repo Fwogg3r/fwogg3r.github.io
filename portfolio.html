@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Portfolio · Fwogg3r</title>
+    <link rel="stylesheet" href="members.css">
+    <script src="site.js" defer></script>
+    <script type="module">
+      import { mountUserMenu } from "./auth.js";
+      mountUserMenu();
+    </script>
+  </head>
+  <body>
+    <main class="page">
+      <h1>Portfolio</h1>
+
+      <h2>Experience</h2>
+
+      <h3>Embedded Engineer</h3>
+      <p><span class="hl">Chauvin Arnoux d.b.a. AEMC Instruments</span> <span class="dim">· Dover, NH · Aug 2025 – Present</span></p>
+      <ul>
+        <li>Develop and maintain production firmware (C/C++) for electrical measurement and data-logging instruments.</li>
+        <li>Led software and hardware development for a major product revision, porting it to a new codebase while expanding its capabilities.</li>
+        <li>Improved an instrument's measurement accuracy from &ge;2% to &le;0.5% error through software signal-processing improvements, with no hardware redesign.</li>
+        <li>Cut instrument test time from ~20 seconds to under 7 seconds.</li>
+        <li>Built Python and LabVIEW tools that automate calibration, testing, data collection, and reporting.</li>
+        <li>Built a locally hosted LLM platform for secure internal AI-assisted analysis.</li>
+      </ul>
+
+      <h2>Education</h2>
+      <p><span class="hl">Southern New Hampshire University</span> <span class="dim">· Manchester, NH · July 2025</span></p>
+      <p>B.S. Computer Science, Minor in Robotics</p>
+      <p class="dim">President's List, Dean's List</p>
+
+      <h2>Skills</h2>
+      <p><span class="label">Languages:</span> C, C++, C#, Python, Java, JavaScript, SQL, Lua, Kotlin</p>
+      <p><span class="label">Embedded:</span> ARM/NXP Kinetis, UART, Modbus, JTAG/SWD, hardware/software integration</p>
+      <p><span class="label">Automation &amp; Testing:</span> Python, LabVIEW, automated validation, system testing</p>
+      <p><span class="label">Tools:</span> Git, SVN, Jira, CMake, GCC, MCUXpresso, Keil µVision, SEGGER Ozone</p>
+      <p><span class="label">AI/ML:</span> PyTorch, TensorFlow, OpenAI API</p>
+
+      <h2>Interests</h2>
+      <p>Embedded Systems, Game Development, Astrophysics, Statistics, Machine Learning<span class="cursor" aria-hidden="true"></span></p>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Team Members · Fwogg3r</title>
+    <meta name="robots" content="noindex">
+    <link rel="stylesheet" href="members.css">
+    <script src="site.js" defer></script>
+  </head>
+  <body class="team-page auth-pending">
+    <main>
+      <p><a href="index.html">&lt; back to fwogg3r.com</a></p>
+      <h1>Members</h1>
+      <p>Welcome, <span id="who" class="hl"></span>.</p>
+
+      <div class="card">
+        <h2>Team membership</h2>
+        <p>Your membership is $25.00 per month. Start, manage, or cancel it from the Billing page.</p>
+        <a class="btn" href="billing.html">Go to billing</a>
+      </div>
+    </main>
+
+    <script type="module">
+      import { requireMember, mountUserMenu } from "./auth.js";
+      mountUserMenu();
+      requireMember((user) => {
+        document.getElementById("who").textContent = user.email;
+      });
+    </script>
+  </body>
+</html>

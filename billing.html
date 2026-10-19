@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Team Billing · Fwogg3r</title>
+    <meta name="robots" content="noindex">
+    <link rel="stylesheet" href="members.css">
+    <script src="site.js" defer></script>
+  </head>
+  <body class="team-page auth-pending">
+    <main>
+      <p><a href="members.html">&lt; back to Members</a></p>
+      <h1>Billing</h1>
+      <p class="hint">Signed in as <span id="who"></span></p>
+
+      <div class="card">
+        <h2>Subscribe</h2>
+        <p>Team Membership: <strong>$25.00 / month</strong>, billed automatically each month to your card.</p>
+        <p class="hint">Use <span class="me"></span> at checkout so your subscription is linked to your team account.</p>
+        <a class="btn block" id="subscribe" href="#" rel="noopener">Subscribe for $25/month</a>
+      </div>
+
+      <div class="card">
+        <h2>Manage or cancel</h2>
+        <p>Update your card, view invoices, or cancel your subscription in Stripe's secure billing portal.
+          Sign in there with <span class="me"></span>. Cancelling stops billing at the end of your current month.</p>
+        <a class="btn secondary block" id="portal" href="#" rel="noopener">Manage / cancel subscription</a>
+      </div>
+    </main>
+
+    <script type="module">
+      import { requireMember, mountUserMenu, STRIPE_SUBSCRIBE_URL, STRIPE_PORTAL_URL, STRIPE_TEST_MODE } from "./auth.js";
+      mountUserMenu();
+      requireMember((user) => {
+        if (STRIPE_TEST_MODE) {
+          const note = document.createElement("div");
+          note.className = "msg ok";
+          note.textContent = "TEST MODE (localhost): links go to Stripe's sandbox. Pay with card 4242 4242 4242 4242, any future date, any CVC. No real charges.";
+          document.querySelector("main h1").after(note);
+        }
+        document.getElementById("who").textContent = user.email;
+        document.querySelectorAll(".me").forEach((el) => (el.textContent = user.email));
+        document.getElementById("subscribe").href = STRIPE_SUBSCRIBE_URL;
+        document.getElementById("portal").href = STRIPE_PORTAL_URL;
+      });
+    </script>
+  </body>
+</html>

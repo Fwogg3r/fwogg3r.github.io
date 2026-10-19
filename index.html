@@ -1,226 +1,88 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
-    <title>Thomas Bryant's Portfolio</title>
-    <style>
-      #hover_el {
-        height: 100px;
-        width: 800px;
-      }
-
-      #hover_el:hover {
-        border: 0px dashed blue;
-      }
-
-      body {
-        background-color: #333333;
-        color: #FFFFFF;
-        font-family: 'Courier New', Courier, monospace;
-      }
-
-      .container {
-        align-items: left;
-        justify-content: left;
-        max-width: 800px;
-        margin: 0 auto;
-        padding: 40px;
-      }
-
-      h1 {
-        color: #00CC66;
-        font-size: 100px;
-      }
-      
-
-
-      .profile-image {
-        display: block;
-        float: left;
-        margin: 0 auto;
-        border-radius: 20%;
-        width: 25%;
-        height: 25%;
-        object-fit: cover;
-      }
-
-      .section {
-        text-align: left;
-        margin-top: -40px;
-        margin-bottom: 100px;
-      }
-
-      .section h2 {
-        color: #86eba1;
-        font-size: 40px;
-        text-align: left;
-        margin-bottom: -20px;
-        color: #86eba1;
-      }
-      
-      .section h3{
-          font-size: 25px;
-          margin-bottom: -20px;
-      }
-      
-      .section h4{
-          font-size: 20px;
-          margin-bottom: -20px;
-      }
-
-      .section p {
-        text-align: left;
-        line-height: 1.6;
-      }
-    </style>
-    <script type='text/javascript'>
-      var notReset = true;
-      var index = 0;
-      var defaultTxt = 'Thomas Bryant';
-      var changeTxt = 'Fwogg3r';
-      window.onload = function() {
-        check_for_hover()
-      };
-
-      function writeWord(hover_element, word) {
-        txt = word;
-        setTimeout(function() {
-          if (index < txt.length) {
-            hover_element.innerHTML += txt[index];
-            index++;
-          }
-        }, 100);
-      };
-
-      function deleteWord(hover_element) {
-        setTimeout(function() {
-          hover_element.innerHTML = hover_element.innerHTML.slice(0, hover_element.innerHTML.length - 1);
-        }, 100);
-        if (hover_element.innerHTML.length == 0) {
-          index = 0;
-        }
-      };
-
-      function check_for_hover() {
-        var hover_element = document.getElementById('hover_el');
-        var hover_status = (getStyle(hover_element, 'border-style') === 'dashed') ? true : false;
-        if (hover_status) {
-          if (hover_element.innerHTML.localeCompare(changeTxt) != 0 && index == txt.length) {
-            deleteWord(hover_element);
-          } else if (hover_element.innerHTML.localeCompare(changeTxt) != 0) {
-            writeWord(hover_element, changeTxt);
-          }
-        } else {
-          if (hover_element.innerHTML.localeCompare(defaultTxt) != 0 && index == txt.length) {
-            deleteWord(hover_element);
-          } else if (hover_element.innerHTML.localeCompare(defaultTxt) != 0) {
-            writeWord(hover_element, defaultTxt);
-          }
-        };
-        setTimeout(check_for_hover, 100);
-      };
-
-      function getStyle(oElm, strCssRule) {
-        var strValue = "";
-        if (document.defaultView && document.defaultView.getComputedStyle) {
-          strValue = document.defaultView.getComputedStyle(oElm, "").getPropertyValue(strCssRule);
-        } else if (oElm.currentStyle) {
-          strCssRule = strCssRule.replace(/\-(\w)/g, function(strMatch, p1) {
-            return p1.toUpperCase();
-          });
-          strValue = oElm.currentStyle[strCssRule];
-        }
-        return strValue;
-      };
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Thomas Bryant · Fwogg3r</title>
+    <link rel="stylesheet" href="members.css">
+    <script src="site.js" defer></script>
+    <script type="module">
+      import { mountUserMenu } from "./auth.js";
+      mountUserMenu();
     </script>
   </head>
   <body>
-    <div class="container">
-      <header>
-        <h1 id='hover_el'></h1>
-      </header>
-      <section class="section">
-        <h2>About Me</h2>
-        <p> Hello, I'm <span style="color: #00CC66"> Thomas Bryant</span> AKA <span style="color: #00CC66"> Fwogg3r</span>!<br> I've been programming since the age of 12 on the <span style="color: #fa5252">Roblox</span> Studio Engine. <br> I'm currently 20 years old and studying <span style="color: #86eba1">Computer Science</span> at <span style="color: #74aee8">Southern New Hampshire University.</span>
-        <br>
-        I am a passionate learner invested in the pursuit of knowledge above all, and strive in my day to day to learn and develop new skills.
-        <br>
-        I have always been fascinated with technology of all kinds and have dedicated my life to learning new skills to interface and develop it on all levels.
-        </p>
-      </section>
-      <section class="section">
-        <h2>Portfolio</h2>
-        <p>Specific work and projects available upon inquiry.</p>
-        <h3 style = "color: #74aee8"> Programming</h3>
-        <h4 style="color: #fa5252">Roblox:</h4> 
-        <p>
-        Full-Stack Developer (2016-Present)
-        <br>
-        <a href = "https://www.roblox.com/users/43875752/profile" style = "color: #00CC66">My Profile</a>
-        <br>
-        <br>
-        <a href = "https://www.roblox.com/groups/3360429/SCPF-Special-Containment-Procedures-Foundation#!/about" style = "color: #fff">Civilous' SCPF, Senior Developer (2018-Present)</a>
-        <br>
-        <span style = "color: #74aee8">Notable Work:</span>
-        <br>
-        Worked on all games for a concurrent group playerbase of over 50,000 members.
-        <br>
-        More upon inquiry.
-        <br>
-        <br>
-        <a href = "https://www.roblox.com/groups/32519906/GizmoGears#!/about" style = "color: #fff">GizmoGears, Owner (2023-Present)</a>
-        <br>
-        <span style = "color: #74aee8">Notable Work:</span>
-        <br>
-        Created and programmed GunGrade, a high mobility third-person shooter game with roguelike elements.
-        <br>
-        More upon inquiry.
-        <h4 style="color: #f5e15d">Known Languages:</h4>
-        <p>
-            C++
-            <br>
-            C#
-            <br>
-            Java
-            <br>
-            JavaScript
-            <br>
-            Python
-            <br>
-            HTML
-            <br>
-            CSS
-            <br>
-            Lua
-        </p>
-        <h3 style = "color: #74aee8">Graphic Design</h3>
-        <p>
-            Proficient in Photoshop, Illustrator.
-            <br>
-            <span style = "color: #74aee8">Notable Work:</span>
-            <br>
-            Created numerous textures, logos, and more for games, classes, and more.
-            <br>
-            More upon inquiry.
-        </p>
-        <h3 style = "color: #74aee8">Sound Design</h3>
-        <p>
-            Knowledgeable in the application of sound and music into projects.
-            <br>
-            <span style = "color: #74aee8">Notable Work:</span>
-            <br>
-            Available upon inquiry.
-        </p>
-      </section>
-      <section class="section">
-        <h2>Contact and Socials</h2>
-        <p>
-            Email: <a href = "mailto:thomas.bryant@fwogg3r.com" style = "color: #74aee8">thomas.bryant@fwogg3r.com</a>
-            <br>
-            Roblox: <a href = "https://www.roblox.com/users/43875752/profile" style = "color: #00CC66">Profile</a>
-            <br>
-            Further forms of contact and full resume available upon request via email inquiry.
-        </p>
-      </section>
-    </div>
+    <main class="landing">
+      <p class="prompt">C:\FWOGG3R&gt; whoami</p>
+      <h1 class="hero">Hi, I'm <span class="name" id="name" tabindex="0" aria-label="Thomas Bryant, also known as Fwogg3r">Thomas Bryant</span>!<span class="cursor" aria-hidden="true"></span></h1>
+      <p class="sub">Use the [ MENU ] in the top left to look around.</p>
+    </main>
+
+    <script>
+      // Hovering the name "backspaces" it away and types the alias; leaving reverses it.
+      (function () {
+        var el = document.getElementById("name");
+        var REAL = "Thomas Bryant";
+        var ALIAS = "Fwogg3r";
+        var target = REAL;
+        var timer = null;
+        var DELETE_MS = 55;
+        var TYPE_MS = 95;
+
+        function step() {
+          var cur = el.textContent;
+          var delay;
+          if (cur === target) { timer = null; return; }
+          if (target.indexOf(cur) !== 0) {
+            // Current text isn't the start of the target: backspace one character.
+            el.textContent = cur.slice(0, -1);
+            delay = DELETE_MS;
+          } else {
+            // Type the next character of the target.
+            el.textContent = target.slice(0, cur.length + 1);
+            delay = TYPE_MS + Math.random() * 60;
+          }
+          timer = setTimeout(step, delay);
+        }
+
+        function go(next) {
+          target = next;
+          if (!timer) step();
+        }
+
+        // The name shrinks while it's being deleted, so the pointer can end up outside it
+        // without actually moving away. Remember the area it covered when hovered and
+        // only switch back once the pointer leaves that whole area.
+        var zone = null;
+        function inside(r, x, y) {
+          return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+        }
+        el.addEventListener("mouseenter", function () {
+          zone = el.getBoundingClientRect();
+          go(ALIAS);
+        });
+        document.addEventListener("mousemove", function (e) {
+          if (!zone) return;
+          var now = el.getBoundingClientRect();
+          if (!inside(zone, e.clientX, e.clientY) && !inside(now, e.clientX, e.clientY)) {
+            zone = null;
+            go(REAL);
+          }
+        });
+        document.addEventListener("mouseleave", function () {
+          if (zone) { zone = null; go(REAL); }
+        });
+        window.addEventListener("scroll", function () {
+          if (zone) zone = el.getBoundingClientRect();
+        }, { passive: true });
+        el.addEventListener("focus", function () { go(ALIAS); });
+        el.addEventListener("blur", function () { go(REAL); });
+        // Touch screens have no hover: tap to toggle.
+        el.addEventListener("touchstart", function (e) {
+          e.preventDefault();
+          go(target === ALIAS ? REAL : ALIAS);
+        }, { passive: false });
+      })();
+    </script>
   </body>
 </html>
