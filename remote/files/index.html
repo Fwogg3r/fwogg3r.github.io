@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Team Files · Fwogg3r</title>
+    <meta name="robots" content="noindex">
+    <link rel="stylesheet" href="/members.css">
+    <script src="/site.js" defer></script>
+  </head>
+  <body class="team-page auth-pending">
+    <main>
+      <p><a href="/members.html">&lt; back to Members</a></p>
+      <h1>Team files</h1>
+      <p class="hint">Signed in as <span id="who"></span></p>
+
+      <div class="card" id="checking">
+        <p>Checking your TeraStation account&hellip;</p>
+      </div>
+
+      <div class="card" id="ok" hidden>
+        <h2>TeraStation</h2>
+        <p>Your TeraStation username is <span class="hl" id="nas-user"></span>.</p>
+        <p>Click below, then sign in with that username and your <strong>TeraStation password</strong>
+          (not your website password). You'll see the folders your TeraStation account is allowed to open.</p>
+        <a class="btn block" id="open" href="#" rel="noopener">Open team files</a>
+        <p class="hint">Files open at <span id="files-host"></span>. Your session closes after 30 minutes idle.</p>
+      </div>
+
+      <div class="card" id="missing" hidden>
+        <h2>No TeraStation account</h2>
+        <p>There's no TeraStation user named <span class="hl" id="nas-user-missing"></span> linked to your email.
+          Ask Thomas to create one if you need access to the team drives.</p>
+      </div>
+
+      <div id="msg" class="msg" role="status" aria-live="polite"></div>
+    </main>
+
+    <script type="module">
+      import { requireMember, mountUserMenu, checkNasAccess, nasUsernameFor, FILES_URL } from "/auth.js";
+      const $ = (id) => document.getElementById(id);
+      mountUserMenu();
+      requireMember(async (user) => {
+        const username = nasUsernameFor(user.email);
+        $("who").textContent = user.email;
+        const result = await checkNasAccess(user);
+        $("checking").hidden = true;
+        if (result === "ok") {
+          $("nas-user").textContent = username;
+          $("open").href = FILES_URL;
+          $("files-host").textContent = new URL(FILES_URL).host;
+          $("ok").hidden = false;
+        } else if (result === "missing") {
+          $("nas-user-missing").textContent = username;
+          $("missing").hidden = false;
+        } else {
+          const m = $("msg");
+          m.className = "msg error";
+          m.textContent = "Couldn't check your TeraStation account right now. Please try again in a minute.";
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -58,9 +58,12 @@
       const submit = $("submit"), msg = $("msg"), resend = $("resend");
       let mode = "signin";
 
-      const allowedNext = ["members.html", "billing.html"];
-      const nextParam = new URLSearchParams(location.search).get("next");
-      const next = allowedNext.includes(nextParam) ? nextParam : "members.html";
+      // Only same-site pages are allowed as a post-login destination.
+      const allowedNext = ["/members.html", "/billing.html", "/remote/files/"];
+      let nextParam = new URLSearchParams(location.search).get("next") || "";
+      if (nextParam && !nextParam.startsWith("/")) nextParam = "/" + nextParam;
+      if (nextParam === "/remote/files" || nextParam === "/remote/files/index.html") nextParam = "/remote/files/";
+      const next = allowedNext.includes(nextParam) ? nextParam : "/members.html";
 
       function show(text, kind = "error") { msg.textContent = text; msg.className = "msg " + kind; }
       function clear() { msg.textContent = ""; msg.className = "msg"; }

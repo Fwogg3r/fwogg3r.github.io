@@ -1,0 +1,17 @@
+rules_version = '2';
+// Firestore security rules for the fwogg3r-team project.
+// Paste into Firebase console -> Firestore Database -> Rules, then Publish.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // One document per TeraStation username, e.g. nasUsers/tbryant.
+    // A verified member can read only the document matching their own email
+    // (tbryant@fwogg3r.com -> nasUsers/tbryant). Nobody can list or write
+    // from the website; you manage these documents in the Firebase console.
+    match /nasUsers/{username} {
+      allow get: if request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() == username + '@fwogg3r.com';
+      allow list, write: if false;
+    }
+  }
+}

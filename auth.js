@@ -6,6 +6,11 @@ import {
   onAuthStateChanged,
   signOut,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  getFirestore,
+  doc,
+  getDoc,
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 
 export const ALLOWED_DOMAIN = "fwogg3r.com";
@@ -30,7 +35,38 @@ export const STRIPE_PORTAL_URL = STRIPE.portal;
 
 export const configured = !String(firebaseConfig.apiKey).startsWith("REPLACE");
 
-export const auth = configured ? getAuth(initializeApp(firebaseConfig)) : null;
+const app = configured ? initializeApp(firebaseConfig) : null;
+export const auth = app ? getAuth(app) : null;
+const db = app ? getFirestore(app) : null;
+
+// ---- Remote file access (TeraStation) -------------------------------------
+// The TeraStation's WebAccess is published through a Cloudflare Tunnel at this
+// address (no router ports opened). See claude/remote-files-setup.md.
+export const FILES_URL = "https://files.fwogg3r.com/";
+
+// tbryant@fwogg3r.com -> "tbryant"
+export function nasUsernameFor(email) {
+  return String(email || "").trim().toLowerCase().split("@")[0];
+}
+
+// Checks whether this member has a matching TeraStation account.
+// The list lives in Firestore: collection "nasUsers", one document per
+// TeraStation username (document ID = username, e.g. "tbryant").
+// Firestore rules only let a verified member read the document whose ID
+// matches their own email, so nobody can list the other usernames.
+// Returns "ok" | "missing" | "unavailable".
+export async function checkNasAccess(user) {
+  if (!db || !isMember(user)) return "missing";
+  try {
+    const snap = await getDoc(doc(db, "nasUsers", nasUsernameFor(user.email)));
+    return snap.exists() && snap.data().enabled !== false ? "ok" : "missing";
+  } catch (err) {
+    // permission-denied means "no document for you"; anything else is an outage.
+    if (err && err.code === "permission-denied") return "missing";
+    console.warn("NAS user check failed:", err);
+    return "unavailable";
+  }
+}
 
 if (!configured) {
   console.warn("Team sign-in is not set up yet: fill in firebase-config.js.");
@@ -64,16 +100,16 @@ export function onMemberChange(cb) {
 
 export async function logOut() {
   if (auth) await signOut(auth);
-  window.location.href = "index.html";
+  window.location.href = "/index.html";
 }
 
 // Protects a page: non-members are sent to the login page.
 // Reveals the page (removes body.auth-pending) once a member is confirmed.
 export function requireMember(onReady) {
-  const here = window.location.pathname.split("/").pop() || "index.html";
+  const here = window.location.pathname;
   onMemberChange((user, member) => {
     if (!member) {
-      window.location.replace("login.html?next=" + encodeURIComponent(here));
+      window.location.replace("/login.html?next=" + encodeURIComponent(here));
       return;
     }
     document.body.classList.remove("auth-pending");
@@ -92,7 +128,7 @@ export function mountUserMenu() {
     wrap.innerHTML = "";
     if (!member) {
       const a = document.createElement("a");
-      a.href = "login.html";
+      a.href = "/login.html";
       a.className = "user-menu-login";
       a.textContent = "Team login";
       wrap.appendChild(a);
@@ -111,8 +147,9 @@ export function mountUserMenu() {
     menu.hidden = true;
 
     const items = [
-      ["Members", "members.html"],
-      ["Billing", "billing.html"],
+      ["Members", "/members.html"],
+      ["Files", "/remote/files/"],
+      ["Billing", "/billing.html"],
     ];
     for (const [label, href] of items) {
       const a = document.createElement("a");

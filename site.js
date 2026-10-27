@@ -29,7 +29,7 @@
 
     PAGES.forEach(function (p) {
       var a = document.createElement("a");
-      a.href = p[1];
+      a.href = "/" + p[1];
       a.textContent = p[0];
       if (p[1] === here) a.setAttribute("aria-current", "page");
       list.appendChild(a);
