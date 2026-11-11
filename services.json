@@ -57,7 +57,7 @@
         "operate",
         "admin"
       ],
-      "cfAccessApp": null,
+      "cfAccessApp": "agentdash",
       "enforcedBy": "agentdash",
       "order": 50,
       "highRiskLevels": [
