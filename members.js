@@ -55,7 +55,9 @@ function stamp(u) {
 function userCard(u) {
   const owner = isOwner(profile);
   const isSuper = u.role === "superadmin";
-  const locked = isSuper && !owner; // only the owner may touch a superadmin doc
+  // Rules: only the owner may write a superadmin doc, or any doc that holds a high-risk grant.
+  const holdsHigh = catalog.some((svc) => isHighRisk(svc, u.services && u.services[svc.id]));
+  const locked = !owner && (isSuper || holdsHigh);
   const card = el("div", { class: "perm-user" + (u.email === profile.email ? " me" : "") });
 
   const roleSel = el("select", { title: owner ? "Role" : "Only the owner can change roles", disabled: !owner });
@@ -73,8 +75,7 @@ function userCard(u) {
       const risky = isHighRisk(svc, l);
       sel.append(el("option", { value: l, text: l + (risky ? " (owner only)" : ""), selected: cur === l, disabled: risky && !owner && cur !== l }));
     }
-    // Changing or revoking an existing high-risk grant is owner-only too (firestore.rules).
-    if (locked || (!owner && isHighRisk(svc, cur))) { sel.disabled = true; sel.title = "Only the owner can change this grant"; }
+    if (locked || (!owner && isHighRisk(svc, cur))) { sel.disabled = true; sel.title = "Only the owner can change this user"; }
     selects[svc.id] = sel;
     grid.append(el("div", {}, el("label", { for: sel.id, text: svc.name }), sel));
   }
@@ -84,6 +85,9 @@ function userCard(u) {
   const save = el("button", { type: "button", class: "btn small", text: "Save", disabled: locked });
   const del = el("button", { type: "button", class: "btn small danger", text: "Remove", disabled: locked });
   card.append(el("div", { class: "perm-foot" }, note, save, del));
+  if (locked) card.append(el("div", { class: "hint", text: isSuper
+    ? "Superadmin: only the owner can change this user."
+    : "This user holds a high-risk grant (Home Assistant, SSH, or AgentController operate/admin). Only the owner can edit or remove them, so that the grant stays attributed to the owner." }));
   card.append(el("div", { class: "perm-stamp", text: stamp(u) }));
 
   save.addEventListener("click", async () => {

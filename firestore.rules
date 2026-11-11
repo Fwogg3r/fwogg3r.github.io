@@ -49,17 +49,12 @@ service cloud.firestore {
     }
 
     // High-risk grants (highRisk in services.json): ha, sheila-ssh, laptop-ssh,
-    // agentdash operate/admin. Only the owner may grant, change or revoke them.
+    // agentdash operate/admin. Only the owner may grant, change or revoke them, and a
+    // superadmin may not write (or delete) any doc that holds one, before or after, so
+    // updatedBy on such a doc is always the owner's uid (the sync relies on that).
     function isHigh(id, v) {
       return (id in ['ha', 'sheila-ssh', 'laptop-ssh'] && v != null)
         || (id == 'agentdash' && v in ['operate', 'admin']);
-    }
-    function highSame(oldM, newM, id) {
-      return oldM.get(id, null) == newM.get(id, null) || !(isHigh(id, oldM.get(id, null)) || isHigh(id, newM.get(id, null)));
-    }
-    function highUntouched(oldM, newM) {
-      return highSame(oldM, newM, 'ha') && highSame(oldM, newM, 'sheila-ssh')
-        && highSame(oldM, newM, 'laptop-ssh') && highSame(oldM, newM, 'agentdash');
     }
     function hasHigh(m) {
       return isHigh('ha', m.get('ha', null)) || isHigh('sheila-ssh', m.get('sheila-ssh', null))
@@ -120,7 +115,8 @@ service cloud.firestore {
                 && resource.data.role == 'member'
                 && request.resource.data.role == 'member'
                 && email != 'tbryant@fwogg3r.com'
-                && highUntouched(resource.data.services, request.resource.data.services)));
+                && !hasHigh(resource.data.services)
+                && !hasHigh(request.resource.data.services)));
       allow delete: if isOwner()
         || (isSuperadmin() && resource.data.role == 'member' && !hasHigh(resource.data.services));
     }
