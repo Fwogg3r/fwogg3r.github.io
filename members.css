@@ -250,7 +250,8 @@ body.auth-pending main { visibility: hidden; }
 label { display: block; margin: 14px 0 4px; color: var(--fg-dim); }
 label::after { content: ":"; }
 input[type="email"],
-input[type="password"] {
+input[type="password"],
+input[type="text"].mfa-code {
   width: 100%;
   padding: 6px 10px;
   font-family: var(--font);
@@ -352,3 +353,12 @@ textarea.json {
 .perm-stamp { font-size: 17px; color: var(--fg-dim); }
 .risk { color: var(--error); }
 [hidden] { display: none !important; }
+
+/* ---- two-step verification (TOTP) ---- */
+#mfa-form h2 { margin-top: 0; }
+.mfa-warn { border: 1px solid var(--error); color: var(--error); padding: 8px 12px; margin: 12px 0; }
+.mfa-card.prominent { border-color: var(--fg); }
+.mfa-qr { display: block; width: 216px; max-width: 100%; height: auto; background: #fff; margin: 8px 0; image-rendering: pixelated; }
+.mfa-key { font-family: var(--font); color: var(--fg-bright); word-break: break-all; user-select: all; }
+.mfa-list { list-style: none; padding: 0; margin: 8px 0; }
+.mfa-list li { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 6px 0; }

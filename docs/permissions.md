@@ -71,9 +71,29 @@ Follow the checklist in `CLAUDE.md`: `services.json`, the Firestore catalog (re-
 ## Owner to-do in the Firebase console (not done by the repo)
 
 1. Authentication, Sign-in method: keep Email/Password, enable **Google**. Authentication, Settings, Authorized domains must include fwogg3r.com.
-2. Enable MFA (TOTP) and enroll the owner account.
+2. Upgrade to Identity Platform (Authentication, Settings or the upgrade prompt), then Authentication, Sign-in method, **Multi-factor authentication**: enable it with **TOTP** (SMS stays off). Then enroll the owner on the Team page (Security card). See "MFA" below.
 3. Publish `firestore.rules` (Firestore, Rules).
 4. Sign in as the owner, open Team, Permissions, **Seed catalog**.
+
+## MFA (two-step verification, TOTP)
+
+Client code: `mfa.js` (helpers), `login.html` (second step of sign-in), `members.js` + the Security card on `members.html` (enroll / remove). The QR code is drawn locally on a canvas by the vendored `vendor/qrcode-generator.js` (qrcode-generator 1.4.4, MIT); the secret is never sent to a third party. No new CSP origins: Firebase TOTP calls go to `identitytoolkit.googleapis.com`, already covered by `https://*.googleapis.com` in `members.html`; `login.html` has no CSP.
+
+**Needs** the project upgraded to Identity Platform and TOTP MFA enabled (see "Owner to-do").
+
+**Enroll (any signed-in user):** Team page, Services tab, "Security" card, "Set up authenticator app". Scan the QR code (or type the key), enter the current 6-digit code, "Turn on". The issuer shown in the app is `fwogg3r.com`, the account name is your email. If Firebase asks for a recent sign-in, the page offers to sign you out so you can sign in again, then retry. After enrolling, sign out and sign in once more: the session token only carries the second factor after a sign-in that used it.
+
+**Sign in:** email/password or Google, then the page asks for the 6-digit code. Works the same for both.
+
+**Enforcement:**
+- Client: the Permissions tab shows a warning banner when the admin has no second factor. A **superadmin** without an active second factor (none enrolled, or this session started without it) has every management control disabled.
+- Rules: `firestore.rules` requires `request.auth.token.firebase.sign_in_second_factor != null` (`hasSecondFactor()`) for all **superadmin writes** (users create/update/delete, catalog writes and deletes). Reads are unaffected. The **owner is exempt until they enroll**; once the owner has MFA, make it mandatory by adding `&& hasSecondFactor()` to the owner branches (`isOwner()` in the users rules and in `isAdminMfa()`). Do this only after confirming a sign-in with a code works; the Firebase console and the read-only sync service account bypass the rules, so a mistake is recoverable there.
+- Tests: `docs/rules-test.mjs` has `mfa:` cases (token claim `firebase: {sign_in_second_factor: "totp"}`).
+
+**Recovery:**
+- Lost password: password reset via email (login page, "Forgot password?"). A password reset does not remove the second factor.
+- Lost authenticator (owner or anyone): the owner removes the factor in the Firebase console, Authentication, Users, open the user, remove the second factor (or sign in with the existing code and use "Remove" on the Security card). Keep a second device or the manual key stored in a password manager so you are never down to one copy.
+- Locked-out owner: the console and the Admin SDK do not depend on these rules; fix the factor there.
 
 ## Rules test plan (Firebase console, Firestore, Rules, Rules Playground)
 

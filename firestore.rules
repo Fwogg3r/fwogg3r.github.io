@@ -26,6 +26,19 @@ service cloud.firestore {
     function isAdmin() {
       return isOwner() || isSuperadmin();
     }
+    // True when this session signed in with a second factor (TOTP). Needs Identity Platform;
+    // .get() because the claim is absent for single-factor sessions.
+    function hasSecondFactor() {
+      return request.auth.token.firebase.get('sign_in_second_factor', null) != null;
+    }
+    // Superadmin WRITES require a second factor. The owner is exempt until they enroll
+    // (then add `&& hasSecondFactor()` to isOwner-based writes too, see docs/permissions.md, "MFA").
+    function isSuperadminMfa() {
+      return isSuperadmin() && hasSecondFactor();
+    }
+    function isAdminMfa() {
+      return isOwner() || isSuperadminMfa();
+    }
     function hasUserDoc() {
       return signedIn() && exists(/databases/$(database)/documents/users/$(myEmail()));
     }
@@ -113,20 +126,20 @@ service cloud.firestore {
       // be "owner" (validUser).
       allow create: if validUser(email)
         && (isOwner()
-            || (isSuperadmin()
+            || (isSuperadminMfa()
                 && request.resource.data.role == 'member'
                 && email != 'tbryant@fwogg3r.com'
                 && !hasHigh(request.resource.data.services)));
       allow update: if validUser(email)
         && (isOwner()
-            || (isSuperadmin()
+            || (isSuperadminMfa()
                 && resource.data.role == 'member'
                 && request.resource.data.role == 'member'
                 && email != 'tbryant@fwogg3r.com'
                 && !hasHigh(resource.data.services)
                 && !hasHigh(request.resource.data.services)));
       allow delete: if isOwner()
-        || (isSuperadmin() && resource.data.role == 'member' && !hasHigh(resource.data.services));
+        || (isSuperadminMfa() && resource.data.role == 'member' && !hasHigh(resource.data.services));
     }
 
     // ---- services/{id}: the catalog --------------------------------------
@@ -134,8 +147,8 @@ service cloud.firestore {
     // catalog holds public URLs only). Writable by owner + superadmins.
     match /services/{id} {
       allow get, list: if isAdmin() || hasUserDoc();
-      allow create, update: if isAdmin() && validService();
-      allow delete: if isAdmin();
+      allow create, update: if isAdminMfa() && validService();
+      allow delete: if isAdminMfa();
     }
 
     // ---- nasUsers/{username}: unchanged ----------------------------------

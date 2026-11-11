@@ -14,10 +14,13 @@ const env = await initializeTestEnvironment({
   firestore: { rules: readFileSync(RULES, "utf8"), host, port: Number(port) },
 });
 
-const ctx = (a, verified = true) =>
-  env.authenticatedContext(a.uid, { email: a.email, email_verified: verified }).firestore();
+const ctx = (a, verified = true, extra = {}) =>
+  env.authenticatedContext(a.uid, { email: a.email, email_verified: verified, ...extra }).firestore();
+// What Firebase puts in the ID token after a TOTP sign-in (Identity Platform).
+const MFA = { firebase: { sign_in_provider: "password", sign_in_second_factor: "totp", identities: {} } };
 const asOwner = () => ctx(OWNER);
-const asSa = () => ctx(SA);
+const asSa = () => ctx(SA, true, MFA);          // superadmin signed in with a second factor
+const asSaNoMfa = () => ctx(SA);                // superadmin, single-factor session
 const asM = () => ctx(M);
 
 // Same shape as permissions.js saveUser(): email, role, services, note, serverTimestamp, uid, email.
@@ -170,6 +173,23 @@ await t("services: all valid enforcedBy values", "allow", async () => {
 await t("services: all valid sso values", "allow", async () => {
   for (const s of ["access-jwt", "oidc", "google-oidc", "none"]) await setSvc(asOwner(), OWNER, "x", { sso: s });
 });
+// ---- MFA: superadmin writes need a second factor; reads and the owner are unaffected ----
+await t("mfa: superadmin without 2nd factor cannot create member", "deny", () => setUser(asSaNoMfa(), SA, "new@x.com"));
+await t("mfa: superadmin without 2nd factor cannot update member", "deny", () => setUser(asSaNoMfa(), SA, "m@x.com", { services: { files: "on" }, note: "n" }));
+await t("mfa: superadmin without 2nd factor cannot delete member", "deny", () => deleteDoc(doc(asSaNoMfa(), "users/m@x.com")));
+await t("mfa: superadmin without 2nd factor cannot write catalog", "deny", () => setSvc(asSaNoMfa(), SA, "x"));
+await t("mfa: superadmin without 2nd factor cannot delete service", "deny", () => deleteDoc(doc(asSaNoMfa(), "services/files")));
+await t("mfa: superadmin without 2nd factor can still read users", "allow", () => getDocs(collection(asSaNoMfa(), "users")));
+await t("mfa: superadmin without 2nd factor can still read catalog", "allow", () => getDocs(collection(asSaNoMfa(), "services")));
+await t("mfa: superadmin with 2nd factor creates member", "allow", () => setUser(asSa(), SA, "new@x.com"));
+await t("mfa: superadmin with 2nd factor writes catalog", "allow", () => setSvc(asSa(), SA, "x"));
+await t("mfa: superadmin with 2nd factor still cannot touch superadmin", "deny", () => setUser(asSa(), SA, "sa2@x.com", { role: "superadmin" }));
+await t("mfa: claim must be non-null (sign_in_second_factor null)", "deny", () => setUser(ctx(SA, true, { firebase: { sign_in_second_factor: null } }), SA, "new@x.com"));
+await t("mfa: owner without 2nd factor still writes (exempt until enrolled)", "allow", () => setUser(asOwner(), OWNER, "sa@x.com", { role: "superadmin" }));
+await t("mfa: owner with 2nd factor writes", "allow", () => setUser(ctx(OWNER, true, MFA), OWNER, "new@x.com"));
+await t("mfa: owner without 2nd factor writes catalog", "allow", () => setSvc(asOwner(), OWNER, "x"));
+await t("mfa: second factor alone does not make a plain member an admin", "deny", () => setUser(ctx(M, true, MFA), M, "new@x.com"));
+
 const NOBODY = { uid: "NOBODY", email: "nobody@x.com" };
 await t("services: user without users doc cannot read catalog", "deny", () => getDoc(doc(ctx(NOBODY), "services/files")));
 await t("services: member can list catalog", "allow", () => getDocs(collection(asM(), "services")));

@@ -41,6 +41,15 @@
         <button type="button" class="linkish" id="forgot">Forgot password?</button>
         <button type="button" class="linkish" id="resend" hidden>Resend verification email</button>
 
+        <form id="mfa-form" novalidate hidden>
+          <h2>Two-step verification</h2>
+          <p class="hint">Open your authenticator app and enter the 6-digit code for fwogg3r.com.</p>
+          <label for="mfa-code">6-digit code</label>
+          <input id="mfa-code" class="mfa-code" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="7" placeholder="123456">
+          <button class="btn block" type="submit" id="mfa-submit">Verify</button>
+          <button type="button" class="linkish" id="mfa-cancel">Cancel and start over</button>
+        </form>
+
         <div id="msg" class="msg" role="status" aria-live="polite"></div>
       </div>
     </main>
@@ -56,6 +65,7 @@
         signInWithPopup,
       } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
       import { auth, configured, isVerified } from "./auth.js";
+      import { isMfaRequired, startMfaSignIn, finishMfaSignIn, isCode, cleanCode, mfaErrorText } from "./mfa.js";
 
       const $ = (id) => document.getElementById(id);
       const form = $("auth-form"), email = $("email"), password = $("password"), confirm = $("confirm");
@@ -140,6 +150,7 @@
             location.replace(next);
           }
         } catch (err) {
+          if (isMfaRequired(err)) { beginMfa(err, false); return; }
           show(friendly(err));
         } finally {
           submit.disabled = false;
@@ -156,9 +167,64 @@
           location.replace(next);
         } catch (err) {
           if (err && (err.code === "auth/popup-closed-by-user" || err.code === "auth/cancelled-popup-request")) return;
+          if (isMfaRequired(err)) { beginMfa(err, true); return; }
           show(friendly(err));
         }
       });
+
+      // ---- second step: TOTP code (email/password and Google both land here) ----
+      const mfaForm = $("mfa-form"), mfaCode = $("mfa-code"), mfaSubmit = $("mfa-submit");
+      let mfaState = null;
+      const normalUi = [form, $("google"), $("forgot"), resend, document.querySelector(".tabs")];
+
+      function showMfaStep(on) {
+        for (const n of normalUi) n.style.display = on ? "none" : "";
+        mfaForm.hidden = !on;
+        if (on) { mfaCode.value = ""; mfaCode.focus(); }
+      }
+
+      function beginMfa(err, viaGoogle) {
+        try { mfaState = startMfaSignIn(auth, err); } catch (_) { mfaState = null; }
+        if (!mfaState) {
+          show("This account needs a second step that this page cannot complete. Contact the owner.");
+          return;
+        }
+        mfaState.viaGoogle = viaGoogle;
+        clear();
+        showMfaStep(true);
+      }
+
+      mfaForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (!mfaState) return;
+        clear();
+        if (!isCode(mfaCode.value)) { show("Enter the 6-digit code from your authenticator app."); return; }
+        mfaSubmit.disabled = true;
+        try {
+          const cred = await finishMfaSignIn(mfaState, cleanCode(mfaCode.value));
+          if (!isVerified(cred.user)) {
+            const viaGoogle = mfaState.viaGoogle;
+            await signOut(auth);
+            mfaState = null;
+            showMfaStep(false);
+            show(viaGoogle ? "That Google account's email is not verified." : "Please verify your email first, then sign in again.");
+            return;
+          }
+          location.replace(next);
+        } catch (err) {
+          if (err && err.code === "auth/invalid-multi-factor-session") {
+            mfaState = null; // the first-step session timed out: start over
+            showMfaStep(false);
+          } else if (err && (err.code === "auth/invalid-verification-code" || err.code === "auth/code-expired")) {
+            mfaCode.select();
+          }
+          show(mfaErrorText(err));
+        } finally {
+          mfaSubmit.disabled = false;
+        }
+      });
+
+      $("mfa-cancel").addEventListener("click", () => { mfaState = null; showMfaStep(false); clear(); });
 
       resend.addEventListener("click", async () => {
         if (!auth || !auth.currentUser) return;
