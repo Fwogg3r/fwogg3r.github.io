@@ -22,6 +22,21 @@ function msg(text, kind = "error") { const m = $("msg"); m.textContent = text; m
 function errText(e) {
   return e && e.code === "permission-denied" ? "Permission denied (rules refused this change)." : (e && e.message) || "Something went wrong.";
 }
+// What a grant does today, by enforcement type (shown to the person who holds it; no internal details).
+const ENFORCEMENT = {
+  "cloudflare-access": { tag: "Sign in with Cloudflare Access", note: "Sign in with Cloudflare Access (one-time code or Google). The service may also ask for its own account or key." },
+  "access-oidc": { tag: "Sign in with Cloudflare Access", note: "Sign in with Cloudflare Access; the service signs you in automatically." },
+  "warp-gateway": { tag: "WARP device + Gateway", note: "WARP device + Gateway (managed by the owner): the owner enrolls your device and adds you to the Gateway rule. Granting this here does not change it by itself." },
+  "own-login": { tag: "Own account", note: "Uses its own login. The owner also creates your account; a grant here only shows the link." },
+  "agentdash": { tag: "Cloudflare Access", note: "Sign in with Cloudflare Access; your level decides what you can do." },
+  "none": { tag: "Informational", note: "Informational only; nothing to sign in to." },
+};
+const MANUAL_NOTE = {
+  photos: "The owner also creates your Immich account.",
+  passwords: "The owner also creates your vault (invitation).",
+  ha: "The owner also creates your Home Assistant account.",
+  pmjc: "Owner only; the owner adds any other person by hand.",
+};
 const safeUrl = (u) => (typeof u === "string" && /^https:\/\//.test(u) ? u : null);
 
 let me, profile, catalog = [];
@@ -38,9 +53,14 @@ function renderServices() {
     const li = el("li");
     const url = safeUrl(svc.url);
     li.append(url ? el("a", { href: url, rel: "noopener", text: svc.name, class: "svc-name" }) : el("span", { class: "svc-name", text: svc.name }));
-    if (!url) li.append(el("span", { class: "tag", text: "[SSH access]" }));
+    const enf = ENFORCEMENT[svc.enforcedBy];
+    if (!url) li.append(el("span", { class: "tag", text: svc.enforcedBy === "cloudflare-access" ? "[SSH access]" : "[no web link]" }));
+    if (enf) li.append(el("span", { class: "tag", text: "[" + enf.tag + "]" }));
     if (svc.levels.length > 1) li.append(el("span", { class: "tag", text: "[" + lvl + "]" }));
     if (svc.description) li.append(el("div", { class: "hint", text: svc.description }));
+    if (enf && (svc.enforcedBy === "own-login" || svc.enforcedBy === "warp-gateway" || svc.enforcedBy === "access-oidc")) {
+      li.append(el("div", { class: "hint", text: "What a grant does: " + (MANUAL_NOTE[svc.id] || enf.note) + (MANUAL_NOTE[svc.id] && svc.enforcedBy === "own-login" ? " A grant here only shows the link." : "") }));
+    }
     list.append(li);
   }
   $("svc-empty").hidden = shown > 0;
@@ -87,7 +107,7 @@ function userCard(u) {
   card.append(el("div", { class: "perm-foot" }, note, save, del));
   if (locked) card.append(el("div", { class: "hint", text: isSuper
     ? "Superadmin: only the owner can change this user."
-    : "This user holds a high-risk grant (Home Assistant, SSH, or AgentController operate/admin). Only the owner can edit or remove them, so that the grant stays attributed to the owner." }));
+    : "This user holds a high-risk grant (Home Assistant, SSH, RDP, network drives, local LLMs, pmjc, or AgentController operate/admin). Only the owner can edit or remove them, so that the grant stays attributed to the owner." }));
   card.append(el("div", { class: "perm-stamp", text: stamp(u) }));
 
   save.addEventListener("click", async () => {
@@ -119,7 +139,7 @@ async function renderUsers() {
 // ---- Catalog editor ---------------------------------------------------------------------
 function catalogRow(svc) {
   const d = el("details", {});
-  d.append(el("summary", { text: `${svc.name} (${svc.id}) - ${svc.enforcedBy}` }));
+  d.append(el("summary", { text: `${svc.name} (${svc.id}) - ${svc.enforcedBy}${svc.highRisk ? " (high-risk)" : ""}` }));
   const { id, updatedAt, updatedBy, updatedByEmail, ...editable } = svc;
   const ta = el("textarea", { class: "json", value: JSON.stringify(editable, null, 2), spellcheck: false });
   const save = el("button", { type: "button", class: "btn small", text: "Save service" });

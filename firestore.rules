@@ -36,8 +36,8 @@ service cloud.firestore {
       return !(id in m) || m[id] in levels;
     }
     function validGrants(m) {
-      return m.keys().hasOnly(['files', 'ha', 'sheila-ssh', 'laptop-ssh', 'agentdash', 'pmjc', 'passwords', 'photos'])
-        && m.size() <= 8
+      return m.keys().hasOnly(['files', 'files-smb', 'ha', 'sheila-ssh', 'laptop-ssh', 'rdp', 'agentdash', 'pmjc', 'passwords', 'photos', 'lmstudio'])
+        && m.size() <= 11
         && validGrant(m, 'files', ['on'])
         && validGrant(m, 'ha', ['on'])
         && validGrant(m, 'sheila-ssh', ['on'])
@@ -45,20 +45,26 @@ service cloud.firestore {
         && validGrant(m, 'agentdash', ['view', 'operate', 'admin'])
         && validGrant(m, 'pmjc', ['on'])
         && validGrant(m, 'passwords', ['on'])
-        && validGrant(m, 'photos', ['on']);
+        && validGrant(m, 'photos', ['on'])
+        && validGrant(m, 'files-smb', ['on'])
+        && validGrant(m, 'rdp', ['on'])
+        && validGrant(m, 'lmstudio', ['on']);
     }
 
-    // High-risk grants (highRisk in services.json): ha, sheila-ssh, laptop-ssh,
+    // High-risk grants (highRisk in services.json): ha, sheila-ssh, laptop-ssh, rdp,
+    // lmstudio, files-smb, pmjc,
     // agentdash operate/admin. Only the owner may grant, change or revoke them, and a
     // superadmin may not write (or delete) any doc that holds one, before or after, so
     // updatedBy on such a doc is always the owner's uid (the sync relies on that).
     function isHigh(id, v) {
-      return (id in ['ha', 'sheila-ssh', 'laptop-ssh'] && v != null)
+      return (id in ['ha', 'sheila-ssh', 'laptop-ssh', 'rdp', 'lmstudio', 'files-smb', 'pmjc'] && v != null)
         || (id == 'agentdash' && v in ['operate', 'admin']);
     }
     function hasHigh(m) {
       return isHigh('ha', m.get('ha', null)) || isHigh('sheila-ssh', m.get('sheila-ssh', null))
-        || isHigh('laptop-ssh', m.get('laptop-ssh', null)) || isHigh('agentdash', m.get('agentdash', null));
+        || isHigh('laptop-ssh', m.get('laptop-ssh', null)) || isHigh('rdp', m.get('rdp', null))
+        || isHigh('lmstudio', m.get('lmstudio', null)) || isHigh('files-smb', m.get('files-smb', null))
+        || isHigh('pmjc', m.get('pmjc', null)) || isHigh('agentdash', m.get('agentdash', null));
     }
 
     // Shape of a users/{email} document being written.
@@ -78,7 +84,7 @@ service cloud.firestore {
     // Shape of a services/{id} document being written.
     function validService() {
       let d = request.resource.data;
-      return d.keys().hasOnly(['name', 'url', 'description', 'levels', 'highRisk', 'highRiskLevels', 'cfAccessApp', 'enforcedBy', 'order', 'updatedAt', 'updatedBy', 'updatedByEmail'])
+      return d.keys().hasOnly(['name', 'url', 'description', 'levels', 'highRisk', 'highRiskLevels', 'cfAccessApp', 'enforcedBy', 'sso', 'plannedEnforcement', 'order', 'updatedAt', 'updatedBy', 'updatedByEmail'])
         && d.keys().hasAll(['name', 'levels', 'enforcedBy', 'order', 'updatedAt', 'updatedBy', 'updatedByEmail'])
         && d.name is string && d.name.size() > 0 && d.name.size() <= 80
         && (!('url' in d) || d.url == null || (d.url is string && d.url.matches('https://.*')))
@@ -87,7 +93,9 @@ service cloud.firestore {
         && (!('highRisk' in d) || d.highRisk is bool)
         && (!('highRiskLevels' in d) || d.highRiskLevels is list)
         && (!('cfAccessApp' in d) || d.cfAccessApp == null || d.cfAccessApp is string)
-        && d.enforcedBy in ['cloudflare-access', 'own-login', 'agentdash']
+        && d.enforcedBy in ['cloudflare-access', 'access-oidc', 'warp-gateway', 'own-login', 'agentdash', 'none']
+        && (!('sso' in d) || d.sso in ['access-jwt', 'oidc', 'google-oidc', 'none'])
+        && (!('plannedEnforcement' in d) || d.plannedEnforcement in ['cloudflare-access', 'access-oidc', 'warp-gateway', 'own-login', 'agentdash', 'none'])
         && d.order is number
         && d.updatedAt == request.time
         && d.updatedBy == request.auth.uid

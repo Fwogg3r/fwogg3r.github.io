@@ -113,7 +113,9 @@ export async function deleteUser(email) {
   await deleteDoc(doc(db, "users", normEmail(email)));
 }
 
-const SERVICE_KEYS = ["name", "url", "description", "levels", "highRisk", "highRiskLevels", "cfAccessApp", "enforcedBy", "order"];
+const SERVICE_KEYS = ["name", "url", "description", "levels", "highRisk", "highRiskLevels", "cfAccessApp", "enforcedBy", "sso", "plannedEnforcement", "order"];
+export const ENFORCED_BY = ["cloudflare-access", "access-oidc", "warp-gateway", "own-login", "agentdash", "none"];
+const SSO_VALUES = ["access-jwt", "oidc", "google-oidc", "none"];
 
 // Validates and normalizes a catalog entry (shape matches services.json / firestore.rules).
 export function normalizeService(id, s) {
@@ -133,8 +135,15 @@ export function normalizeService(id, s) {
   if (out.url && !/^https:\/\//.test(out.url)) throw new Error("URL must start with https:// (or be empty).");
   if (!out.levels.length) throw new Error("At least one level is required.");
   if (out.levels.includes(NO_ACCESS)) throw new Error('"none" is implicit; do not list it as a level.');
-  if (!["cloudflare-access", "own-login", "agentdash"].includes(out.enforcedBy))
-    throw new Error("enforcedBy must be cloudflare-access, own-login or agentdash.");
+  if (!ENFORCED_BY.includes(out.enforcedBy)) throw new Error("enforcedBy must be one of: " + ENFORCED_BY.join(", ") + ".");
+  if (s.sso != null && s.sso !== "") {
+    if (!SSO_VALUES.includes(s.sso)) throw new Error("sso must be one of: " + SSO_VALUES.join(", ") + ".");
+    out.sso = s.sso;
+  }
+  if (s.plannedEnforcement != null && s.plannedEnforcement !== "") {
+    if (!ENFORCED_BY.includes(s.plannedEnforcement)) throw new Error("plannedEnforcement must be one of: " + ENFORCED_BY.join(", ") + ".");
+    out.plannedEnforcement = s.plannedEnforcement;
+  }
   for (const k of Object.keys(s)) if (!SERVICE_KEYS.includes(k)) throw new Error("Unknown field: " + k);
   return out;
 }
