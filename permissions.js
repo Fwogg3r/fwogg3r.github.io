@@ -53,7 +53,11 @@ export const isAdmin = (p) => p.role === "owner" || p.role === "superadmin";
 export const isOwner = (p) => p.role === "owner";
 
 // Level the profile has on a service ("none" when no access). Admins get the service's highest level.
+// Owner-only services (grantable: false) are visible to the owner alone, never to superadmins or members.
+export const isGrantable = (svc) => svc.grantable !== false;
+
 export function levelFor(profile, svc) {
+  if (!isGrantable(svc)) return isOwner(profile) ? svc.levels[svc.levels.length - 1] : NO_ACCESS;
   if (isAdmin(profile)) return svc.levels[svc.levels.length - 1];
   const lvl = profile.services[svc.id];
   return typeof lvl === "string" && svc.levels.includes(lvl) ? lvl : NO_ACCESS;
@@ -86,6 +90,7 @@ export async function loadUsers() {
 export function cleanGrants(grants, services) {
   const out = {};
   for (const svc of services) {
+    if (!isGrantable(svc)) continue;
     const lvl = grants[svc.id];
     if (typeof lvl === "string" && lvl !== NO_ACCESS && svc.levels.includes(lvl)) out[svc.id] = lvl;
   }
@@ -113,7 +118,7 @@ export async function deleteUser(email) {
   await deleteDoc(doc(db, "users", normEmail(email)));
 }
 
-const SERVICE_KEYS = ["name", "url", "description", "levels", "highRisk", "highRiskLevels", "cfAccessApp", "enforcedBy", "sso", "plannedEnforcement", "order"];
+const SERVICE_KEYS = ["name", "url", "description", "levels", "highRisk", "highRiskLevels", "grantable", "cfAccessApp", "enforcedBy", "sso", "plannedEnforcement", "order"];
 export const ENFORCED_BY = ["cloudflare-access", "access-oidc", "warp-gateway", "own-login", "agentdash", "none"];
 const SSO_VALUES = ["access-jwt", "oidc", "google-oidc", "none"];
 
@@ -129,8 +134,10 @@ export function normalizeService(id, s) {
     enforcedBy: s.enforcedBy,
     highRisk: s.highRisk === true,
     highRiskLevels: Array.isArray(s.highRiskLevels) ? s.highRiskLevels.map(String) : [],
+    ...(s.grantable === false ? { grantable: false } : {}),
     order: Number.isFinite(Number(s.order)) ? Number(s.order) : 100,
   };
+  if (s.grantable != null && typeof s.grantable !== "boolean") throw new Error("grantable must be true or false.");
   if (!out.name) throw new Error("Service name is required.");
   if (out.url && !/^https:\/\//.test(out.url)) throw new Error("URL must start with https:// (or be empty).");
   if (!out.levels.length) throw new Error("At least one level is required.");

@@ -12,6 +12,8 @@ Any service added or changed through the website must be added to the permission
 4. Links to the service on the team page must be gated by the grant (`members.js` / `permissions.js`), never hard-coded.
 5. Update `docs/permissions.md`.
 
+Owner-only services: a catalog entry with `grantable: false` (today `pmjc`) is listed, its link shows to the owner only, and it can never be granted: leave its id OUT of `validGrants` (any write with that grant is denied, even from the owner), show "owner only" instead of a level select, and have `Z:\sharedccess-sync` ignore and alert on such a grant. `validService` and `normalizeService` accept the `grantable` bool.
+
 Other rules: the owner (`tbryant@fwogg3r.com`) is hard-coded in `firestore.rules` and `auth.js` and is never stored as a role; render user-supplied text with `textContent` only; keep the strict CSP on `members.html` (no inline scripts, no Stripe there); never enable custom OIDC/SAML Firebase providers (they can assert `email_verified`).
 
 MFA: TOTP two-step verification lives in `mfa.js` (login second step in `login.html`, Security card in `members.js`); the QR code is drawn locally with `vendor/qrcode-generator.js` (pinned, MIT), never via a third-party service, so keep `members.html` CSP free of new origins. Superadmin writes in `firestore.rules` require `hasSecondFactor()`; keep `docs/rules-test.mjs` `mfa:` cases and the "MFA" section of `docs/permissions.md` in step.

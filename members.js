@@ -7,7 +7,7 @@ import {
   drawQr, isCode, cleanCode, mfaErrorText,
 } from "./mfa.js";
 import {
-  loadProfile, loadServices, loadUsers, canAccess, levelFor, isAdmin, isOwner, isHighRisk,
+  loadProfile, loadServices, loadUsers, canAccess, levelFor, isAdmin, isOwner, isHighRisk, isGrantable,
   saveUser, deleteUser, saveService, deleteService, seedCatalog, normEmail, isValidEmail, NO_ACCESS,
 } from "./permissions.js";
 
@@ -39,7 +39,6 @@ const ENFORCEMENT = {
 const MANUAL_NOTE = {
   passwords: "The owner also creates your vault (invitation).",
   ha: "The owner also creates your Home Assistant account.",
-  pmjc: "Owner only; the owner adds any other person by hand.",
 };
 const safeUrl = (u) => (typeof u === "string" && /^https:\/\//.test(u) ? u : null);
 
@@ -209,6 +208,11 @@ function userCard(u) {
   const grid = el("div", { class: "perm-grid" });
   const selects = {};
   for (const svc of catalog) {
+    if (!isGrantable(svc)) {
+      // Owner-only service: no level select, nobody can be granted it (rules deny any pmjc grant).
+      grid.append(el("div", {}, el("label", { text: svc.name }), el("span", { class: "hint", text: "owner only" })));
+      continue;
+    }
     const cur = (u.services && u.services[svc.id]) || NO_ACCESS;
     const sel = el("select", { id: `g-${u.id}-${svc.id}` });
     sel.append(el("option", { value: NO_ACCESS, text: "none", selected: cur === NO_ACCESS }));
