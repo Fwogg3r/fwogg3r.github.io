@@ -12,7 +12,7 @@
     <main>
       <p><a href="index.html">&lt; back to fwogg3r.com</a></p>
       <h1>Team login</h1>
-      <p class="hint">For team members with an @fwogg3r.com email only.</p>
+      <p class="hint">Team members and invited guests. Access to services is set by the owner; you need to be on the allowlist.</p>
 
       <div class="card">
         <div class="tabs" role="tablist">
@@ -22,7 +22,7 @@
 
         <form id="auth-form" novalidate>
           <label for="email">Email</label>
-          <input id="email" type="email" autocomplete="username" placeholder="you@fwogg3r.com" required>
+          <input id="email" type="email" autocomplete="username" placeholder="you@example.com" required>
 
           <label for="password">Password</label>
           <input id="password" type="password" autocomplete="current-password" required minlength="8">
@@ -35,6 +35,8 @@
 
           <button class="btn block" type="submit" id="submit">Sign in</button>
         </form>
+
+        <button type="button" class="btn secondary block" id="google">Continue with Google</button>
 
         <button type="button" class="linkish" id="forgot">Forgot password?</button>
         <button type="button" class="linkish" id="resend" hidden>Resend verification email</button>
@@ -50,8 +52,10 @@
         sendEmailVerification,
         sendPasswordResetEmail,
         signOut,
+        GoogleAuthProvider,
+        signInWithPopup,
       } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-      import { auth, configured, isAllowedEmail, isMember, ALLOWED_DOMAIN } from "./auth.js";
+      import { auth, configured, isVerified } from "./auth.js";
 
       const $ = (id) => document.getElementById(id);
       const form = $("auth-form"), email = $("email"), password = $("password"), confirm = $("confirm");
@@ -95,8 +99,8 @@
 
       function checkEmail() {
         const v = email.value.trim();
-        if (!isAllowedEmail(v)) {
-          show("Only @" + ALLOWED_DOMAIN + " email addresses can sign in or create an account.");
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) {
+          show("Enter a valid email address.");
           return null;
         }
         return v;
@@ -128,7 +132,7 @@
           } else {
             const cred = await signInWithEmailAndPassword(auth, addr, password.value);
             await cred.user.reload();
-            if (!isMember(auth.currentUser)) {
+            if (!isVerified(auth.currentUser)) {
               show("Please verify your email first. Check your inbox for the link we sent, then sign in again.");
               resend.hidden = false;
               return;
@@ -139,6 +143,20 @@
           show(friendly(err));
         } finally {
           submit.disabled = false;
+        }
+      });
+
+      // Google sign-in (any Google account). Google asserts email_verified for its own accounts.
+      $("google").addEventListener("click", async () => {
+        if (!configured) return;
+        clear();
+        try {
+          const cred = await signInWithPopup(auth, new GoogleAuthProvider());
+          if (!isVerified(cred.user)) { await signOut(auth); show("That Google account's email is not verified."); return; }
+          location.replace(next);
+        } catch (err) {
+          if (err && (err.code === "auth/popup-closed-by-user" || err.code === "auth/cancelled-popup-request")) return;
+          show(friendly(err));
         }
       });
 
