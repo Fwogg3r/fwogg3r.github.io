@@ -1,0 +1,4 @@
+# GitHub Pages (Jekyll) settings.
+# Keep internal docs out of the published site.
+exclude:
+  - docs/
