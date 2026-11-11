@@ -14,10 +14,13 @@ const env = await initializeTestEnvironment({
   firestore: { rules: readFileSync(RULES, "utf8"), host, port: Number(port) },
 });
 
-const ctx = (a, verified = true) =>
-  env.authenticatedContext(a.uid, { email: a.email, email_verified: verified }).firestore();
+const ctx = (a, verified = true, extra = {}) =>
+  env.authenticatedContext(a.uid, { email: a.email, email_verified: verified, ...extra }).firestore();
+// What Firebase puts in the ID token after a TOTP sign-in (Identity Platform).
+const MFA = { firebase: { sign_in_provider: "password", sign_in_second_factor: "totp", identities: {} } };
 const asOwner = () => ctx(OWNER);
-const asSa = () => ctx(SA);
+const asSa = () => ctx(SA, true, MFA);          // superadmin signed in with a second factor
+const asSaNoMfa = () => ctx(SA);                // superadmin, single-factor session
 const asM = () => ctx(M);
 
 // Same shape as permissions.js saveUser(): email, role, services, note, serverTimestamp, uid, email.
@@ -86,9 +89,18 @@ for (const [label, fn] of [
 ]) await t("12 unverified owner " + label, "deny", () => fn(ctx(OWNER, false)));
 await t("13a unknown service", "deny", () => setUser(asOwner(), OWNER, "new@x.com", { services: { nope: "on" } }));
 await t("13b unknown level", "deny", () => setUser(asOwner(), OWNER, "new@x.com", { services: { agentdash: "root" } }));
-await t("14 new ids accepted by owner", "allow", () => setUser(asOwner(), OWNER, "new@x.com", { services: { "files-smb": "on", rdp: "on", lmstudio: "on", pmjc: "on" } }));
+await t("14 new ids accepted by owner", "allow", () => setUser(asOwner(), OWNER, "new@x.com", { services: { "files-smb": "on", rdp: "on", lmstudio: "on" } }));
 for (const id of ["rdp", "lmstudio", "files-smb", "pmjc"])
   await t("15 superadmin high-risk " + id, "deny", () => setUser(asSa(), SA, "new@x.com", { services: { [id]: "on" } }));
+// pmjc is owner-only and not grantable (grantable: false): no one can be granted it, not even the owner.
+await t("14b owner grants pmjc: denied", "deny", () => setUser(asOwner(), OWNER, "new@x.com", { services: { pmjc: "on" } }));
+await t("14c owner grants pmjc among valid grants: denied", "deny", () => setUser(asOwner(), OWNER, "new@x.com", { services: { files: "on", pmjc: "on" } }));
+await t("14d owner updates existing member with pmjc: denied", "deny", () => setUser(asOwner(), OWNER, "m@x.com", { services: { files: "on", pmjc: "on" } }));
+await t("14e owner writes own doc with pmjc: denied", "deny", () => setUser(asOwner(), OWNER, "tbryant@fwogg3r.com", { services: { pmjc: "on" } }));
+await t("14f owner with 2nd factor grants pmjc: denied", "deny", () => setUser(ctx(OWNER, true, MFA), OWNER, "new@x.com", { services: { pmjc: "on" } }));
+await t("14g superadmin (2nd factor) grants pmjc: denied", "deny", () => setUser(asSa(), SA, "new@x.com", { services: { pmjc: "on" } }));
+await t("14h pmjc with any level: denied", "deny", () => setUser(asOwner(), OWNER, "new@x.com", { services: { pmjc: "admin" } }));
+await t("14i owner can still write grants without pmjc", "allow", () => setUser(asOwner(), OWNER, "new@x.com", { services: { files: "on" } }));
 await t("16 new id bad level (rdp admin)", "deny", () => setUser(asOwner(), OWNER, "new@x.com", { services: { rdp: "admin" } }));
 for (const e of ["warp-gateway", "access-oidc", "none"])
   await t("17 catalog enforcedBy " + e, "allow", () => setSvc(asOwner(), OWNER, "x", { enforcedBy: e }));
@@ -167,9 +179,45 @@ await t("services: wrong updatedByEmail denied", "deny", () => setSvc(asOwner(),
 await t("services: all valid enforcedBy values", "allow", async () => {
   for (const e of ["cloudflare-access", "access-oidc", "warp-gateway", "own-login", "agentdash", "none"]) await setSvc(asOwner(), OWNER, "x", { enforcedBy: e });
 });
+await t("services: grantable false accepted (owner-only entry, like pmjc)", "allow", () => setSvc(asOwner(), OWNER, "pmjc", { grantable: false, highRisk: true, enforcedBy: "own-login", sso: "google-oidc", description: "Owner only. Not grantable." }));
+await t("services: grantable true accepted", "allow", () => setSvc(asOwner(), OWNER, "x", { grantable: true }));
+await t("services: grantable string denied", "deny", () => setSvc(asOwner(), OWNER, "pmjc", { grantable: "false" }));
+await t("services: grantable null denied", "deny", () => setSvc(asOwner(), OWNER, "pmjc", { grantable: null }));
+await t("services: grantable number denied", "deny", () => setSvc(asOwner(), OWNER, "pmjc", { grantable: 0 }));
+await t("services: grantable false by superadmin (2nd factor) accepted", "allow", () => setSvc(asSa(), SA, "pmjc", { grantable: false }));
 await t("services: all valid sso values", "allow", async () => {
   for (const s of ["access-jwt", "oidc", "google-oidc", "none"]) await setSvc(asOwner(), OWNER, "x", { sso: s });
 });
+// ---- MFA: superadmin writes need a second factor; reads and the owner are unaffected ----
+await t("mfa: superadmin without 2nd factor cannot create member", "deny", () => setUser(asSaNoMfa(), SA, "new@x.com"));
+await t("mfa: superadmin without 2nd factor cannot update member", "deny", () => setUser(asSaNoMfa(), SA, "m@x.com", { services: { files: "on" }, note: "n" }));
+await t("mfa: superadmin without 2nd factor cannot delete member", "deny", () => deleteDoc(doc(asSaNoMfa(), "users/m@x.com")));
+await t("mfa: superadmin without 2nd factor cannot write catalog", "deny", () => setSvc(asSaNoMfa(), SA, "x"));
+await t("mfa: superadmin without 2nd factor cannot delete service", "deny", () => deleteDoc(doc(asSaNoMfa(), "services/files")));
+await t("mfa: superadmin without 2nd factor can still read users", "allow", () => getDocs(collection(asSaNoMfa(), "users")));
+await t("mfa: superadmin without 2nd factor can still read catalog", "allow", () => getDocs(collection(asSaNoMfa(), "services")));
+await t("mfa: superadmin with 2nd factor creates member", "allow", () => setUser(asSa(), SA, "new@x.com"));
+await t("mfa: superadmin with 2nd factor writes catalog", "allow", () => setSvc(asSa(), SA, "x"));
+await t("mfa: superadmin with 2nd factor still cannot touch superadmin", "deny", () => setUser(asSa(), SA, "sa2@x.com", { role: "superadmin" }));
+await t("mfa: claim must be non-null (sign_in_second_factor null)", "deny", () => setUser(ctx(SA, true, { firebase: { sign_in_second_factor: null } }), SA, "new@x.com"));
+await t("mfa: owner without 2nd factor still writes (exempt until enrolled)", "allow", () => setUser(asOwner(), OWNER, "sa@x.com", { role: "superadmin" }));
+await t("mfa: owner with 2nd factor writes", "allow", () => setUser(ctx(OWNER, true, MFA), OWNER, "new@x.com"));
+await t("mfa: owner without 2nd factor writes catalog", "allow", () => setSvc(asOwner(), OWNER, "x"));
+await t("mfa: second factor alone does not make a plain member an admin", "deny", () => setUser(ctx(M, true, MFA), M, "new@x.com"));
+
+// Sanity: the harness override really reaches request.auth.token.firebase.sign_in_second_factor.
+// If authenticatedContext ignored the claim, the with-claim write below would be denied and this
+// test fails, so the mfa: cases cannot pass vacuously.
+await t("sanity: MFA claim override reaches the rules (same actor, claim on vs off)", "allow", async () => {
+  await assertSucceeds(setUser(asSa(), SA, "new@x.com"));
+  await assertFails(setUser(asSaNoMfa(), SA, "new2@x.com"));
+});
+await t("sanity: only a non-null sign_in_second_factor counts", "allow", async () => {
+  await assertFails(setUser(ctx(SA, true, { firebase: {} }), SA, "new@x.com"));
+  await assertFails(setUser(ctx(SA, true, { firebase: { sign_in_second_factor: null } }), SA, "new@x.com"));
+  await assertSucceeds(setUser(ctx(SA, true, { firebase: { sign_in_second_factor: "totp" } }), SA, "new@x.com"));
+});
+
 const NOBODY = { uid: "NOBODY", email: "nobody@x.com" };
 await t("services: user without users doc cannot read catalog", "deny", () => getDoc(doc(ctx(NOBODY), "services/files")));
 await t("services: member can list catalog", "allow", () => getDocs(collection(asM(), "services")));

@@ -1,8 +1,13 @@
 // Team page: service links gated by permissions, plus the Permissions tab (owner + superadmins).
 // All user-supplied text is rendered with textContent / value, never innerHTML.
-import { requireUser, mountUserMenu, isMember, checkNasAccess } from "./auth.js";
+import { requireUser, mountUserMenu, isMember, checkNasAccess, auth } from "./auth.js";
+import { signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  loadProfile, loadServices, loadUsers, canAccess, levelFor, isAdmin, isOwner, isHighRisk,
+  enrolledTotp, enrolledFactors, hasMfa, beginTotpEnrollment, finishTotpEnrollment, unenrollFactor,
+  drawQr, isCode, cleanCode, mfaErrorText,
+} from "./mfa.js";
+import {
+  loadProfile, loadServices, loadUsers, canAccess, levelFor, isAdmin, isOwner, isHighRisk, isGrantable,
   saveUser, deleteUser, saveService, deleteService, seedCatalog, normEmail, isValidEmail, NO_ACCESS,
 } from "./permissions.js";
 
@@ -34,11 +39,127 @@ const ENFORCEMENT = {
 const MANUAL_NOTE = {
   passwords: "The owner also creates your vault (invitation).",
   ha: "The owner also creates your Home Assistant account.",
-  pmjc: "Owner only; the owner adds any other person by hand.",
 };
 const safeUrl = (u) => (typeof u === "string" && /^https:\/\//.test(u) ? u : null);
 
 let me, profile, catalog = [];
+// A superadmin without an active second factor may not manage anything (firestore.rules requires it
+// for superadmin writes too). The owner only gets a warning until they enroll.
+let mfaActive = false;
+const mfaBlocked = () => profile.role === "superadmin" && !mfaActive;
+const MFA_BLOCK_HINT = "Turn on two-step verification (Services tab, Security) and sign in again with your code to manage the allowlist.";
+
+// "Active" = this session's token carries a second-factor sign-in (what the rules check).
+async function refreshMfaState() {
+  try {
+    const r = await me.getIdTokenResult(true);
+    mfaActive = !!(r.claims.firebase && r.claims.firebase.sign_in_second_factor);
+  } catch (_) { mfaActive = false; }
+}
+
+// ---- Security card (any signed-in user) -------------------------------------------------
+async function signInAgain() {
+  if (!confirm("For your security, this needs a fresh sign-in. Sign out now and sign in again?")) return;
+  try { await signOut(auth); } catch (_) { /* ignore */ }
+  window.location.replace("/login.html?next=" + encodeURIComponent("/members.html"));
+}
+const withRecentLogin = async (fn) => {
+  try { return await fn(); }
+  catch (e) {
+    if (e && e.code === "auth/requires-recent-login") { msg(mfaErrorText(e)); await signInAgain(); return undefined; }
+    throw e;
+  }
+};
+
+function renderSecurity() {
+  const admin = isAdmin(profile);
+  const totp = enrolledTotp(me);
+  $("sec-card").classList.toggle("prominent", admin);
+  const warn = $("sec-warn");
+  if (admin && !totp.length) {
+    warn.hidden = false;
+    warn.textContent = profile.role === "owner"
+      ? "Your account can change who has access to everything, and it has no second factor. Set up two-step verification now."
+      : "Superadmin actions are disabled until you set up two-step verification.";
+  } else if (admin && totp.length && !mfaActive) {
+    warn.hidden = false;
+    warn.textContent = "Two-step verification is set up, but this session was started without it. Sign out and sign in again with your code.";
+  } else warn.hidden = true;
+  $("sec-status").textContent = totp.length ? "Two-step verification is ON." : "Two-step verification is OFF.";
+  const list = $("sec-factors");
+  list.replaceChildren();
+  for (const f of enrolledFactors(me)) {
+    const when = f.enrollmentTime ? " (added " + new Date(f.enrollmentTime).toISOString().slice(0, 10) + ")" : "";
+    const rm = el("button", { type: "button", class: "btn small danger", text: "Remove" });
+    rm.addEventListener("click", async () => {
+      if (!confirm("Remove this authenticator? Your account will be less protected.")) return;
+      try {
+        const done = await withRecentLogin(async () => { await unenrollFactor(me, f); return true; });
+        if (!done) return;
+        msg("Authenticator removed.", "ok");
+        await refreshMfaState();
+        renderSecurity(); renderPermsGate();
+      } catch (e) { msg(mfaErrorText(e)); }
+    });
+    list.append(el("li", {}, el("span", { text: (f.displayName || "Authenticator app") + when }), rm));
+  }
+  $("sec-start").hidden = !!totp.length || !$("sec-enroll").hidden;
+}
+
+let pending = null; // { secret, key, uri } while enrolling
+function endEnroll() {
+  pending = null;
+  $("sec-enroll").hidden = true;
+  $("sec-key").textContent = "";
+  $("sec-code").value = "";
+  $("sec-start").hidden = hasMfa(me);
+}
+
+function initSecurity() {
+  $("sec-start").addEventListener("click", async () => {
+    $("sec-start").disabled = true;
+    try {
+      const r = await withRecentLogin(() => beginTotpEnrollment(me));
+      if (!r) return;
+      pending = r;
+      drawQr($("sec-qr"), r.uri);
+      $("sec-key").textContent = r.key;
+      $("sec-enroll").hidden = false;
+      $("sec-start").hidden = true;
+      $("sec-code").focus();
+    } catch (e) { msg(mfaErrorText(e)); }
+    finally { $("sec-start").disabled = false; }
+  });
+  $("sec-cancel").addEventListener("click", endEnroll);
+  $("sec-confirm").addEventListener("click", async () => {
+    if (!pending) return;
+    if (!isCode($("sec-code").value)) return msg("Enter the 6-digit code from your authenticator app.");
+    $("sec-confirm").disabled = true;
+    try {
+      const done = await withRecentLogin(async () => { await finishTotpEnrollment(me, pending.secret, cleanCode($("sec-code").value)); return true; });
+      if (!done) return;
+      endEnroll();
+      await refreshMfaState();
+      renderSecurity(); renderPermsGate();
+      msg(mfaActive ? "Two-step verification is on." : "Two-step verification is on. Sign out and sign in again with your code so admin actions can use it.", "ok");
+    } catch (e) { msg(mfaErrorText(e)); if (e && e.code === "auth/invalid-verification-code") $("sec-code").select(); }
+    finally { $("sec-confirm").disabled = false; }
+  });
+}
+
+// Permissions tab: banner + disabled controls for a superadmin without MFA.
+function renderPermsGate() {
+  if (!isAdmin(profile)) return;
+  const b = $("mfa-banner");
+  const blocked = mfaBlocked();
+  b.hidden = !(blocked || !hasMfa(me));
+  b.textContent = blocked ? "Management actions are disabled. " + MFA_BLOCK_HINT
+    : "Warning: your admin account has no second factor. Set up two-step verification on the Services tab (Security).";
+  for (const id of ["add-email", "seed", "add-service"]) $(id).disabled = blocked;
+  $("add-form").querySelector("button").disabled = blocked;
+  $("catalog").replaceChildren(...catalog.map(catalogRow));
+  renderUsers();
+}
 
 // ---- Services pane ----------------------------------------------------------------------
 function renderServices() {
@@ -76,7 +197,7 @@ function userCard(u) {
   const isSuper = u.role === "superadmin";
   // Rules: only the owner may write a superadmin doc, or any doc that holds a high-risk grant.
   const holdsHigh = catalog.some((svc) => isHighRisk(svc, u.services && u.services[svc.id]));
-  const locked = !owner && (isSuper || holdsHigh);
+  const locked = !owner && (isSuper || holdsHigh || mfaBlocked());
   const card = el("div", { class: "perm-user" + (u.email === profile.email ? " me" : "") });
 
   const roleSel = el("select", { title: owner ? "Role" : "Only the owner can change roles", disabled: !owner });
@@ -87,6 +208,11 @@ function userCard(u) {
   const grid = el("div", { class: "perm-grid" });
   const selects = {};
   for (const svc of catalog) {
+    if (!isGrantable(svc)) {
+      // Owner-only service: no level select, nobody can be granted it (rules deny any pmjc grant).
+      grid.append(el("div", {}, el("label", { text: svc.name }), el("span", { class: "hint", text: "owner only" })));
+      continue;
+    }
     const cur = (u.services && u.services[svc.id]) || NO_ACCESS;
     const sel = el("select", { id: `g-${u.id}-${svc.id}` });
     sel.append(el("option", { value: NO_ACCESS, text: "none", selected: cur === NO_ACCESS }));
@@ -104,7 +230,7 @@ function userCard(u) {
   const save = el("button", { type: "button", class: "btn small", text: "Save", disabled: locked });
   const del = el("button", { type: "button", class: "btn small danger", text: "Remove", disabled: locked });
   card.append(el("div", { class: "perm-foot" }, note, save, del));
-  if (locked) card.append(el("div", { class: "hint", text: isSuper
+  if (locked) card.append(el("div", { class: "hint", text: mfaBlocked() ? MFA_BLOCK_HINT : isSuper
     ? "Superadmin: only the owner can change this user."
     : "This user holds a high-risk grant (Home Assistant, SSH, RDP, network drives, local LLMs, pmjc, or AgentController operate/admin). Only the owner can edit or remove them, so that the grant stays attributed to the owner." }));
   card.append(el("div", { class: "perm-stamp", text: stamp(u) }));
@@ -141,8 +267,8 @@ function catalogRow(svc) {
   d.append(el("summary", { text: `${svc.name} (${svc.id}) - ${svc.enforcedBy}${svc.highRisk ? " (high-risk)" : ""}` }));
   const { id, updatedAt, updatedBy, updatedByEmail, ...editable } = svc;
   const ta = el("textarea", { class: "json", value: JSON.stringify(editable, null, 2), spellcheck: false });
-  const save = el("button", { type: "button", class: "btn small", text: "Save service" });
-  const del = el("button", { type: "button", class: "btn small danger", text: "Delete" });
+  const save = el("button", { type: "button", class: "btn small", text: "Save service", disabled: mfaBlocked() });
+  const del = el("button", { type: "button", class: "btn small danger", text: "Delete", disabled: mfaBlocked() });
   save.addEventListener("click", () => persistService(id, ta.value));
   del.addEventListener("click", async () => {
     if (!confirm("Delete service " + id + "? Rules still allow only the hard-coded service ids in grants.")) return;
@@ -183,6 +309,9 @@ requireUser(async (user) => {
   $("who").textContent = user.email;
   profile = await loadProfile(user);
   $("role").textContent = "(" + profile.role + ")";
+  await refreshMfaState();
+  initSecurity();
+  renderSecurity();
   if (isMember(user)) {
     $("member-card").hidden = false;
     // The TeraStation card keeps the existing nasUsers flow.
@@ -193,6 +322,7 @@ requireUser(async (user) => {
 
   if (isAdmin(profile)) {
     $("page-tabs").hidden = false;
+    renderPermsGate();
     $("tab-services").addEventListener("click", () => selectTab("services"));
     $("tab-perms").addEventListener("click", () => selectTab("perms"));
     $("seed-wrap").hidden = !isOwner(profile);

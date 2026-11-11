@@ -26,6 +26,19 @@ service cloud.firestore {
     function isAdmin() {
       return isOwner() || isSuperadmin();
     }
+    // True when this session signed in with a second factor (TOTP). Needs Identity Platform;
+    // .get() because the claim is absent for single-factor sessions.
+    function hasSecondFactor() {
+      return request.auth.token.firebase.get('sign_in_second_factor', null) != null;
+    }
+    // Superadmin WRITES require a second factor. The owner is exempt until they enroll
+    // (then add `&& hasSecondFactor()` to isOwner-based writes too, see docs/permissions.md, "MFA").
+    function isSuperadminMfa() {
+      return isSuperadmin() && hasSecondFactor();
+    }
+    function isAdminMfa() {
+      return isOwner() || isSuperadminMfa();
+    }
     function hasUserDoc() {
       return signedIn() && exists(/databases/$(database)/documents/users/$(myEmail()));
     }
@@ -35,15 +48,16 @@ service cloud.firestore {
     function validGrant(m, id, levels) {
       return !(id in m) || m[id] in levels;
     }
+    // pmjc is an OWNER-ONLY service (grantable: false in services.json): it is deliberately absent
+    // from this allow-list, so ANY write that carries a pmjc grant is denied, even from the owner.
     function validGrants(m) {
-      return m.keys().hasOnly(['files', 'files-smb', 'ha', 'sheila-ssh', 'laptop-ssh', 'rdp', 'agentdash', 'pmjc', 'passwords', 'photos', 'lmstudio'])
-        && m.size() <= 11
+      return m.keys().hasOnly(['files', 'files-smb', 'ha', 'sheila-ssh', 'laptop-ssh', 'rdp', 'agentdash', 'passwords', 'photos', 'lmstudio'])
+        && m.size() <= 10
         && validGrant(m, 'files', ['on'])
         && validGrant(m, 'ha', ['on'])
         && validGrant(m, 'sheila-ssh', ['on'])
         && validGrant(m, 'laptop-ssh', ['on'])
         && validGrant(m, 'agentdash', ['view', 'operate', 'admin'])
-        && validGrant(m, 'pmjc', ['on'])
         && validGrant(m, 'passwords', ['on'])
         && validGrant(m, 'photos', ['on'])
         && validGrant(m, 'files-smb', ['on'])
@@ -52,7 +66,8 @@ service cloud.firestore {
     }
 
     // High-risk grants (highRisk in services.json): ha, sheila-ssh, laptop-ssh, rdp,
-    // lmstudio, files-smb, pmjc,
+    // lmstudio, files-smb, pmjc (pmjc is not grantable at all; kept here so an old doc that
+    // holds one stays owner-only to touch),
     // agentdash operate/admin. Only the owner may grant, change or revoke them, and a
     // superadmin may not write (or delete) any doc that holds one, before or after, so
     // updatedBy on such a doc is always the owner's uid (the sync relies on that).
@@ -84,7 +99,7 @@ service cloud.firestore {
     // Shape of a services/{id} document being written.
     function validService() {
       let d = request.resource.data;
-      return d.keys().hasOnly(['name', 'url', 'description', 'levels', 'highRisk', 'highRiskLevels', 'cfAccessApp', 'enforcedBy', 'sso', 'plannedEnforcement', 'order', 'updatedAt', 'updatedBy', 'updatedByEmail'])
+      return d.keys().hasOnly(['name', 'url', 'description', 'levels', 'highRisk', 'highRiskLevels', 'grantable', 'cfAccessApp', 'enforcedBy', 'sso', 'plannedEnforcement', 'order', 'updatedAt', 'updatedBy', 'updatedByEmail'])
         && d.keys().hasAll(['name', 'levels', 'enforcedBy', 'order', 'updatedAt', 'updatedBy', 'updatedByEmail'])
         && d.name is string && d.name.size() > 0 && d.name.size() <= 80
         && (!('url' in d) || d.url == null || (d.url is string && d.url.matches('https://.*')))
@@ -92,6 +107,7 @@ service cloud.firestore {
         && d.levels is list && d.levels.size() >= 1 && d.levels.size() <= 10
         && (!('highRisk' in d) || d.highRisk is bool)
         && (!('highRiskLevels' in d) || d.highRiskLevels is list)
+        && (!('grantable' in d) || d.grantable is bool)
         && (!('cfAccessApp' in d) || d.cfAccessApp == null || d.cfAccessApp is string)
         && d.enforcedBy in ['cloudflare-access', 'access-oidc', 'warp-gateway', 'own-login', 'agentdash', 'none']
         && (!('sso' in d) || d.sso in ['access-jwt', 'oidc', 'google-oidc', 'none'])
@@ -113,20 +129,20 @@ service cloud.firestore {
       // be "owner" (validUser).
       allow create: if validUser(email)
         && (isOwner()
-            || (isSuperadmin()
+            || (isSuperadminMfa()
                 && request.resource.data.role == 'member'
                 && email != 'tbryant@fwogg3r.com'
                 && !hasHigh(request.resource.data.services)));
       allow update: if validUser(email)
         && (isOwner()
-            || (isSuperadmin()
+            || (isSuperadminMfa()
                 && resource.data.role == 'member'
                 && request.resource.data.role == 'member'
                 && email != 'tbryant@fwogg3r.com'
                 && !hasHigh(resource.data.services)
                 && !hasHigh(request.resource.data.services)));
       allow delete: if isOwner()
-        || (isSuperadmin() && resource.data.role == 'member' && !hasHigh(resource.data.services));
+        || (isSuperadminMfa() && resource.data.role == 'member' && !hasHigh(resource.data.services));
     }
 
     // ---- services/{id}: the catalog --------------------------------------
@@ -134,8 +150,8 @@ service cloud.firestore {
     // catalog holds public URLs only). Writable by owner + superadmins.
     match /services/{id} {
       allow get, list: if isAdmin() || hasUserDoc();
-      allow create, update: if isAdmin() && validService();
-      allow delete: if isAdmin();
+      allow create, update: if isAdminMfa() && validService();
+      allow delete: if isAdminMfa();
     }
 
     // ---- nasUsers/{username}: unchanged ----------------------------------

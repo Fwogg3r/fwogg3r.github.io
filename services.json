@@ -95,7 +95,7 @@
     "pmjc": {
       "name": "pmjc switchboard",
       "url": "https://pmjc.fwogg3r.com",
-      "description": "Personal MCP job controller (can run commands and send messages as the owner). Own Google login, owner only.",
+      "description": "Owner only. Not grantable.",
       "levels": [
         "on"
       ],
@@ -103,6 +103,7 @@
       "enforcedBy": "own-login",
       "order": 60,
       "highRisk": true,
+      "grantable": false,
       "sso": "google-oidc"
     },
     "passwords": {

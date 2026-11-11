@@ -12,15 +12,17 @@ Who can see and use which service, managed from the **Permissions** tab on `memb
 
 "Member" in the paid-membership sense (verified `@fwogg3r.com`: billing, `/remote/files/`, `nasUsers`) is separate from access grants. Billing is untouched.
 
-High-risk grants (owner-only to grant, change or revoke): `ha`, `sheila-ssh`, `laptop-ssh`, `rdp`, `lmstudio`, `files-smb`, `pmjc`, `agentdash` levels `operate`/`admin`. Marked `highRisk` / `highRiskLevels` in the catalog; the rules mirror the list. A superadmin cannot write or delete **any** user doc that holds a high-risk grant (before or after the write), so `updatedBy` on such a doc is always the owner's uid; the sync checks `updatedBy == owner uid` before applying a high-risk grant. In the UI such users show as locked with an explanation.
+High-risk grants (owner-only to grant, change or revoke): `ha`, `sheila-ssh`, `laptop-ssh`, `rdp`, `lmstudio`, `files-smb`, `agentdash` levels `operate`/`admin`. Marked `highRisk` / `highRiskLevels` in the catalog; the rules mirror the list. A superadmin cannot write or delete **any** user doc that holds a high-risk grant (before or after the write), so `updatedBy` on such a doc is always the owner's uid; the sync checks `updatedBy == owner uid` before applying a high-risk grant. In the UI such users show as locked with an explanation.
+
+**Owner-only services** (`grantable: false` in the catalog; today `pmjc`): listed in the catalog and visible on the team page to the owner only, but nobody can be granted them. The rules leave the id out of `validGrants`, so ANY write carrying such a grant is denied, even from the owner (and a superadmin cannot see the link either); the Permissions UI shows "owner only" instead of a level select; `access-sync` ignores and alerts on any such grant found in Firestore and never emits it to `grants.json`. To make a service grantable later, remove the flag and add it to `validGrants` like any other.
 
 ## Data model
 
 `users/{emailLowercase}`: `{email, role: "superadmin"|"member", services: {<id>: <level>}, note, updatedAt, updatedBy (uid), updatedByEmail}`. A level of none = key absent.
 
-`services/{id}`: `{name, url|null, description, levels[], highRisk?, highRiskLevels?, cfAccessApp|null, enforcedBy: "cloudflare-access"|"access-oidc"|"warp-gateway"|"own-login"|"agentdash"|"none", sso?: "access-jwt"|"oidc"|"google-oidc"|"none", plannedEnforcement?, order, updatedAt, updatedBy, updatedByEmail}`. Schema source and seed: `services.json` (public info only).
+`services/{id}`: `{name, url|null, description, levels[], highRisk?, highRiskLevels?, grantable? (false = owner-only, not grantable), cfAccessApp|null, enforcedBy: "cloudflare-access"|"access-oidc"|"warp-gateway"|"own-login"|"agentdash"|"none", sso?: "access-jwt"|"oidc"|"google-oidc"|"none", plannedEnforcement?, order, updatedAt, updatedBy, updatedByEmail}`. Schema source and seed: `services.json` (public info only).
 
-Seed: owner opens Permissions, clicks **Seed catalog**. Initial services (11): files, files-smb, ha, sheila-ssh, laptop-ssh, rdp, agentdash (view/operate/admin), pmjc, passwords, photos, lmstudio.
+Seed: owner opens Permissions, clicks **Seed catalog**. Initial services (11): files, files-smb, ha, sheila-ssh, laptop-ssh, rdp, agentdash (view/operate/admin), pmjc (owner-only, not grantable), passwords, photos, lmstudio.
 
 ## Rules (`firestore.rules`)
 
@@ -51,7 +53,7 @@ The team page only hides links; it is not the security boundary. What a grant do
 | `sheila-ssh`, `laptop-ssh` | cloudflare-access | opens the tunnel only | an authorized SSH key | owner only |
 | `rdp` | warp-gateway | nothing automatic (Gateway policy, owner) | Windows login | owner only |
 | `agentdash` | agentdash | Access app via sync, level checked by agentdash itself (view/operate/admin) | none | operate/admin owner only |
-| `pmjc` | own-login | link only; sync raises an owner alert | own Google login, added by hand | owner only |
+| `pmjc` | own-login | not grantable: link shown to the owner only; a pmjc grant in Firestore is ignored and alerted by the sync | own Google login | owner only (not grantable) |
 | `passwords` | own-login | link only; sync raises an owner alert | the owner invites you to a personal vault | normal |
 | `photos` | own-login (planned: access-oidc) | link only; sync raises an owner alert | Immich account the owner creates (until the Access OIDC cutover) | normal |
 | `lmstudio` | warp-gateway | nothing automatic (Gateway policy, owner) | Cloudflare One Client | owner only |
@@ -59,7 +61,7 @@ The team page only hides links; it is not the security boundary. What a grant do
 - **cloudflare-access** (`files`, `ha`, `sheila-ssh`, `laptop-ssh`): the sync job in `Z:\shared\access-sync` reads Firestore and rewrites each app's allow policy (`cfAccessApp`) to include the granted emails. It only applies grants for service ids it knows. A fixed "tbryant only" policy stays on every app, so the owner never depends on the sync. Removing a grant also revokes that user's active Access sessions.
 - **access-oidc**: Cloudflare Access for SaaS (OIDC); the service redirects to Cloudflare to sign in. Not in use yet; `photos` carries `plannedEnforcement: "access-oidc"` until the Immich cutover, then switches `enforcedBy` and gets `cfAccessApp`.
 - **warp-gateway**: WARP device enrollment plus a Gateway policy, managed by the owner by hand. The sync never sends these to Cloudflare; they appear in `grants.json` and each new grant raises an owner alert for the manual step.
-- **own-login** (`pmjc`, `passwords`, `photos`): the service's own login stays the gate (no Access app, by design: connectors and mobile apps). The grant only shows the link; the owner creates the account. The team page says so.
+- **own-login** (`passwords`, `photos`; `pmjc` is owner-only and not grantable): the service's own login stays the gate (no Access app, by design: connectors and mobile apps). The grant only shows the link; the owner creates the account. The team page says so.
 - **agentdash**: checks the level itself; its sessions are short.
 - **none**: informational row, no door.
 - Not catalogued (no team-facing door): the local search service, the notes vault (NAS folder plus a private repo), and other internal-only endpoints.
@@ -71,9 +73,29 @@ Follow the checklist in `CLAUDE.md`: `services.json`, the Firestore catalog (re-
 ## Owner to-do in the Firebase console (not done by the repo)
 
 1. Authentication, Sign-in method: keep Email/Password, enable **Google**. Authentication, Settings, Authorized domains must include fwogg3r.com.
-2. Enable MFA (TOTP) and enroll the owner account.
+2. Upgrade to Identity Platform (Authentication, Settings or the upgrade prompt), then Authentication, Sign-in method, **Multi-factor authentication**: enable it with **TOTP** (SMS stays off). Then enroll the owner on the Team page (Security card). See "MFA" below.
 3. Publish `firestore.rules` (Firestore, Rules).
 4. Sign in as the owner, open Team, Permissions, **Seed catalog**.
+
+## MFA (two-step verification, TOTP)
+
+Client code: `mfa.js` (helpers), `login.html` (second step of sign-in), `members.js` + the Security card on `members.html` (enroll / remove). The QR code is drawn locally on a canvas by the vendored `vendor/qrcode-generator.js` (qrcode-generator 1.4.4, MIT); the secret is never sent to a third party. No new CSP origins: Firebase TOTP calls go to `identitytoolkit.googleapis.com`, already covered by `https://*.googleapis.com` in `members.html`; `login.html` has no CSP.
+
+**Needs** the project upgraded to Identity Platform and TOTP MFA enabled (see "Owner to-do").
+
+**Enroll (any signed-in user):** Team page, Services tab, "Security" card, "Set up authenticator app". Scan the QR code (or type the key), enter the current 6-digit code, "Turn on". The issuer shown in the app is `fwogg3r.com`, the account name is your email. If Firebase asks for a recent sign-in, the page offers to sign you out so you can sign in again, then retry. After enrolling, sign out and sign in once more: the session token only carries the second factor after a sign-in that used it.
+
+**Sign in:** email/password or Google, then the page asks for the 6-digit code. Works the same for both.
+
+**Enforcement:**
+- Client: the Permissions tab shows a warning banner when the admin has no second factor. A **superadmin** without an active second factor (none enrolled, or this session started without it) has every management control disabled.
+- Rules: `firestore.rules` requires `request.auth.token.firebase.sign_in_second_factor != null` (`hasSecondFactor()`) for all **superadmin writes** (users create/update/delete, catalog writes and deletes). Reads are unaffected. The **owner is exempt until they enroll**; once the owner has MFA, make it mandatory by adding `&& hasSecondFactor()` to the owner branches (`isOwner()` in the users rules and in `isAdminMfa()`). Do this only after confirming a sign-in with a code works; the Firebase console and the read-only sync service account bypass the rules, so a mistake is recoverable there.
+- Tests: `docs/rules-test.mjs` has `mfa:` cases (token claim `firebase: {sign_in_second_factor: "totp"}`).
+
+**Recovery:**
+- Lost password: password reset via email (login page, "Forgot password?"). A password reset does not remove the second factor.
+- Lost authenticator (owner or anyone): the owner removes the factor in the Firebase console, Authentication, Users, open the user, remove the second factor (or sign in with the existing code and use "Remove" on the Security card). Keep a second device or the manual key stored in a password manager so you are never down to one copy.
+- Locked-out owner: the console and the Admin SDK do not depend on these rules; fix the factor there.
 
 ## Rules test plan (Firebase console, Firestore, Rules, Rules Playground)
 
@@ -95,15 +117,15 @@ Write payload fields: `email`, `role`, `services`, `note`, `updatedAt` (use serv
 | 11 | Member reads catalog | m | get `services/files` | Allow |
 | 12 | Unverified email | any uid / tbryant@fwogg3r.com with `email_verified: false` | get/set anything | Deny |
 | 13 | Unknown service / level | owner | services `{nope: "on"}`; `{agentdash: "root"}` | Deny both |
-| 14 | New ids accepted | owner | set `users/new@x.com` services `{files-smb: "on", rdp: "on", lmstudio: "on", pmjc: "on"}` | Allow |
-| 15 | New high-risk ids need the owner | sa | set `users/new@x.com` services `{rdp: "on"}`; again with `{lmstudio: "on"}`, `{files-smb: "on"}`, `{pmjc: "on"}` | Deny all four |
+| 14 | New ids accepted | owner | set `users/new@x.com` services `{files-smb: "on", rdp: "on", lmstudio: "on"}` | Allow |
+| 15 | New high-risk ids need the owner | sa | set `users/new@x.com` services `{rdp: "on"}`; again with `{lmstudio: "on"}`, `{files-smb: "on"}` | Deny all three |
 | 16 | New id, bad level | owner | services `{rdp: "admin"}` | Deny |
 | 17 | Catalog enforcedBy | owner | set `services/x` with `enforcedBy: "warp-gateway"`, then `"access-oidc"`, then `"none"` (valid shape) | Allow all |
 | 18 | Catalog bad enforcedBy / sso | owner | `enforcedBy: "magic"`; or `sso: "x"` | Deny both |
 
 ## Running the rules tests (Firebase emulator, offline)
 
-`docs/rules-test.mjs` runs the test plan above (cases 1-18) plus extra cases (nasUsers, owner identification, shape checks, catalog writes) against the emulator, using the `demo-fwogg3r` project id so nothing touches the real project or console. Last run: 92 passed, 0 failed (firebase-tools 15.35.0, @firebase/rules-unit-testing 6.0.0, firebase 13.2.0, Temurin JRE 21).
+`docs/rules-test.mjs` runs the test plan above (cases 1-18) plus extra cases (nasUsers, owner identification, shape checks, catalog writes) against the emulator, using the `demo-fwogg3r` project id so nothing touches the real project or console. Last run: 123 passed, 0 failed (includes the pmjc owner-only cases and two `sanity:` cases that fail if the MFA claim override stops reaching `request.auth.token.firebase.sign_in_second_factor`) (firebase-tools 15.35.0, @firebase/rules-unit-testing 6.0.0, firebase 13.2.0, Temurin JRE 21).
 
 1. Needs Java 21+ on PATH (a portable JRE is fine; set `JAVA_HOME`/`PATH` for the command only).
 2. In a scratch folder outside this repo: `npm i --save-exact @firebase/rules-unit-testing@6.0.0 firebase@13.2.0`, put `"type": "module"` in its `package.json`, copy `docs/rules-test.mjs` there as `test.mjs`, and add a `firebase.json` with `{"firestore":{"rules":"<path to firestore.rules>"},"emulators":{"firestore":{"host":"127.0.0.1","port":8080},"ui":{"enabled":false}}}`.

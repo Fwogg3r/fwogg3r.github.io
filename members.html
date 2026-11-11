@@ -34,6 +34,26 @@
           <a class="btn" href="/remote/files/">Go to files</a>
         </div>
 
+        <div class="card mfa-card" id="sec-card">
+          <h2>Security: two-step verification</h2>
+          <p class="mfa-warn" id="sec-warn" hidden></p>
+          <p class="hint" id="sec-intro">Protect your account with a 6-digit code from an authenticator app (Google Authenticator, Authy, 1Password, ...) in addition to your password.</p>
+          <p id="sec-status"></p>
+          <ul class="mfa-list" id="sec-factors"></ul>
+          <button type="button" class="btn small" id="sec-start">Set up authenticator app</button>
+          <div id="sec-enroll" hidden>
+            <p>1. Scan this code with your authenticator app, or type the key in by hand.</p>
+            <canvas id="sec-qr" class="mfa-qr" role="img" aria-label="QR code for your authenticator app"></canvas>
+            <p class="hint">Manual entry key: <span id="sec-key" class="mfa-key"></span></p>
+            <p>2. Enter the 6-digit code the app shows now.</p>
+            <input id="sec-code" class="mfa-code" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="7" placeholder="123456">
+            <div class="perm-foot">
+              <button type="button" class="btn small" id="sec-confirm">Turn on</button>
+              <button type="button" class="btn small secondary" id="sec-cancel">Cancel</button>
+            </div>
+          </div>
+        </div>
+
         <div class="card">
           <h2>Your services</h2>
           <ul class="svc-list" id="svc-list"></ul>
@@ -42,6 +62,7 @@
       </section>
 
       <section id="pane-perms" hidden>
+        <p class="mfa-warn" id="mfa-banner" hidden></p>
         <div class="card">
           <h2>Add a person</h2>
           <form class="perm-add" id="add-form" novalidate>
