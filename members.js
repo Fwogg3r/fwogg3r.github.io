@@ -32,7 +32,6 @@ const ENFORCEMENT = {
   "none": { tag: "Informational", note: "Informational only; nothing to sign in to." },
 };
 const MANUAL_NOTE = {
-  photos: "The owner also creates your Immich account.",
   passwords: "The owner also creates your vault (invitation).",
   ha: "The owner also creates your Home Assistant account.",
   pmjc: "Owner only; the owner adds any other person by hand.",

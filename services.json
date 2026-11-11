@@ -120,15 +120,14 @@
     "photos": {
       "name": "Photos (Immich)",
       "url": "https://photos.fwogg3r.com",
-      "description": "Photo library. Own account (the owner creates it); no Access app so the iPhone app works.",
+      "description": "Photo library (Immich). Use 'Login with Cloudflare'; your account is created on first sign-in. Shared albums are by invitation. The iPhone app works too.",
       "levels": [
         "on"
       ],
-      "cfAccessApp": null,
-      "enforcedBy": "own-login",
+      "cfAccessApp": "photos",
+      "enforcedBy": "access-oidc",
       "order": 80,
-      "sso": "none",
-      "plannedEnforcement": "access-oidc"
+      "sso": "oidc"
     },
     "lmstudio": {
       "name": "Local LLMs (LM Studio)",
