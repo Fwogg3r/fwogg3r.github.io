@@ -309,3 +309,46 @@ input:focus { outline: none; border-color: var(--fg); box-shadow: 0 0 8px rgba(5
   .site-nav-button, .user-menu-login, .user-menu-button { font-size: 19px; padding: 3px 9px; }
   .user-menu-button { max-width: 48vw; }
 }
+
+/* ---- Team page: services list + Permissions tab ---- */
+.team-page main.wide { max-width: 980px; }
+.team-page .tabs.page-tabs { margin-top: 20px; margin-bottom: 0; }
+.team-page .tabs.page-tabs button { flex: 0 1 auto; padding: 4px 18px; }
+.svc-list { list-style: none; padding: 0; margin: 0; }
+.svc-list li { margin: 10px 0; padding: 0; }
+.svc-list li::before { content: none; }
+.svc-list .svc-name { color: var(--fg-bright); }
+.svc-list .tag { color: var(--fg-dim); font-size: 19px; margin-left: 6px; }
+
+select,
+input[type="text"] {
+  padding: 3px 6px;
+  font-family: var(--font);
+  font-size: 20px;
+  color: var(--fg-bright);
+  background: var(--bg);
+  border: 1px solid var(--fg-faint);
+  max-width: 100%;
+}
+select:disabled, input:disabled { opacity: 0.5; cursor: not-allowed; }
+select:focus, input[type="text"]:focus { outline: none; border-color: var(--fg); }
+textarea.json {
+  width: 100%; min-height: 200px; padding: 6px 10px; font-family: var(--font); font-size: 18px;
+  color: var(--fg-bright); background: var(--bg); border: 1px solid var(--fg-faint);
+}
+.btn.small { margin-top: 0; padding: 2px 12px; font-size: 20px; }
+.btn.danger { color: var(--error); border-color: var(--error); background: var(--bg); text-shadow: none; }
+.perm-add { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.perm-add input[type="email"] { flex: 1 1 260px; width: auto; }
+.perm-user { border: 1px solid var(--fg-faint); padding: 10px 12px; margin: 12px 0; }
+.perm-user.me { border-color: var(--fg-dim); }
+.perm-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.perm-head .perm-email { color: var(--fg-bright); flex: 1 1 220px; word-break: break-all; }
+.perm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 4px 14px; margin: 8px 0; }
+.perm-grid label { margin: 4px 0 0; font-size: 18px; }
+.perm-grid select { width: 100%; }
+.perm-foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.perm-foot input[type="text"] { flex: 1 1 200px; }
+.perm-stamp { font-size: 17px; color: var(--fg-dim); }
+.risk { color: var(--error); }
+[hidden] { display: none !important; }

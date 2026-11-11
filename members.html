@@ -3,36 +3,70 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Team Members · Fwogg3r</title>
+    <!-- Strict CSP for the team page / admin tab: no inline scripts or styles, no Stripe. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://www.gstatic.com; connect-src 'self' https://*.googleapis.com https://www.googleapis.com; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; frame-src https://fwogg3r-team.firebaseapp.com; base-uri 'none'; form-action 'none'">
+    <title>Team · Fwogg3r</title>
     <meta name="robots" content="noindex">
     <link rel="stylesheet" href="members.css">
     <script src="site.js" defer></script>
   </head>
   <body class="team-page auth-pending">
-    <main>
+    <main id="main" class="wide">
       <p><a href="index.html">&lt; back to fwogg3r.com</a></p>
-      <h1>Members</h1>
-      <p>Welcome, <span id="who" class="hl"></span>.</p>
+      <h1>Team</h1>
+      <p>Welcome, <span id="who" class="hl"></span> <span id="role" class="dim"></span></p>
 
-      <div class="card">
-        <h2>Team membership</h2>
-        <p>Your membership is $25.00 per month. Start, manage, or cancel it from the Billing page.</p>
-        <a class="btn" href="billing.html">Go to billing</a>
+      <div class="tabs page-tabs" role="tablist" id="page-tabs" hidden>
+        <button type="button" role="tab" id="tab-services" aria-selected="true">Services</button>
+        <button type="button" role="tab" id="tab-perms" aria-selected="false">Permissions</button>
       </div>
 
-      <div class="card">
-        <h2>Team files</h2>
-        <p>Open the shared drives on the team TeraStation from anywhere, using your TeraStation username and password.</p>
-        <a class="btn" href="/remote/files/">Go to files</a>
-      </div>
+      <section id="pane-services">
+        <div class="card" id="member-card" hidden>
+          <h2>Team membership</h2>
+          <p>Your membership is $25.00 per month. Start, manage, or cancel it from the Billing page.</p>
+          <a class="btn" href="billing.html">Go to billing</a>
+        </div>
+
+        <div class="card" id="nas-card" hidden>
+          <h2>Team files (TeraStation account)</h2>
+          <p>Open the shared drives on the team TeraStation from anywhere, using your TeraStation username and password.</p>
+          <a class="btn" href="/remote/files/">Go to files</a>
+        </div>
+
+        <div class="card">
+          <h2>Your services</h2>
+          <ul class="svc-list" id="svc-list"></ul>
+          <p class="hint" id="svc-empty" hidden>No services are enabled for your account yet. Ask Thomas for access.</p>
+        </div>
+      </section>
+
+      <section id="pane-perms" hidden>
+        <div class="card">
+          <h2>Add a person</h2>
+          <form class="perm-add" id="add-form" novalidate>
+            <input id="add-email" type="email" placeholder="email@any-domain.com" autocomplete="off">
+            <button class="btn small" type="submit">Add to allowlist</button>
+          </form>
+          <p class="hint">Any email works. They sign in at the login page with that address (password or Google) and see only the services you enable.</p>
+        </div>
+
+        <div id="users"></div>
+
+        <div class="card">
+          <h2>Service catalog</h2>
+          <div id="catalog"></div>
+          <div id="seed-wrap" hidden>
+            <button type="button" class="btn small secondary" id="seed">Seed catalog from services.json (owner)</button>
+            <p class="hint">Writes the services in services.json into Firestore, replacing entries with the same id.</p>
+          </div>
+          <button type="button" class="btn small secondary" id="add-service">Add service</button>
+        </div>
+      </section>
+
+      <div id="msg" class="msg" role="status" aria-live="polite"></div>
     </main>
 
-    <script type="module">
-      import { requireMember, mountUserMenu } from "./auth.js";
-      mountUserMenu();
-      requireMember((user) => {
-        document.getElementById("who").textContent = user.email;
-      });
-    </script>
+    <script type="module" src="members.js"></script>
   </body>
 </html>
