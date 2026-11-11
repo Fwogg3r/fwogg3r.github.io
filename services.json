@@ -1,0 +1,102 @@
+{
+  "_comment": "Schema source for the Firestore services/{id} catalog. Public info only, no secrets. Seeded from the Permissions tab (owner, 'Seed catalog'). See docs/permissions.md.",
+  "services": {
+    "files": {
+      "name": "Team files",
+      "url": "https://files.fwogg3r.com",
+      "description": "TeraStation shared drives (WebAccess). You also need a TeraStation account (nasUsers).",
+      "levels": [
+        "on"
+      ],
+      "cfAccessApp": "files",
+      "enforcedBy": "cloudflare-access",
+      "order": 10
+    },
+    "ha": {
+      "name": "Home Assistant",
+      "url": "https://ha.fwogg3r.com",
+      "description": "Smart-home dashboard.",
+      "levels": [
+        "on"
+      ],
+      "cfAccessApp": "ha",
+      "enforcedBy": "cloudflare-access",
+      "order": 20,
+      "highRisk": true
+    },
+    "sheila-ssh": {
+      "name": "SHEILA SSH",
+      "url": null,
+      "description": "SSH to SHEILA through Cloudflare Access (cloudflared access ssh).",
+      "levels": [
+        "on"
+      ],
+      "cfAccessApp": "sheila-ssh",
+      "enforcedBy": "cloudflare-access",
+      "order": 30,
+      "highRisk": true
+    },
+    "laptop-ssh": {
+      "name": "Laptop SSH",
+      "url": null,
+      "description": "SSH to the laptop through Cloudflare Access (cloudflared access ssh).",
+      "levels": [
+        "on"
+      ],
+      "cfAccessApp": "laptop-ssh",
+      "enforcedBy": "cloudflare-access",
+      "order": 40,
+      "highRisk": true
+    },
+    "agentdash": {
+      "name": "AgentController dashboard",
+      "url": "https://agentdash.fwogg3r.com",
+      "description": "view = read-only, operate = start/stop agents, admin = everything.",
+      "levels": [
+        "view",
+        "operate",
+        "admin"
+      ],
+      "cfAccessApp": null,
+      "enforcedBy": "agentdash",
+      "order": 50,
+      "highRiskLevels": [
+        "operate",
+        "admin"
+      ]
+    },
+    "pmjc": {
+      "name": "pmjc switchboard",
+      "url": "https://pmjc.fwogg3r.com",
+      "description": "Personal MCP job controller. Enforces its own login today.",
+      "levels": [
+        "on"
+      ],
+      "cfAccessApp": null,
+      "enforcedBy": "own-login",
+      "order": 60
+    },
+    "passwords": {
+      "name": "Passwords (Vaultwarden)",
+      "url": "https://passwords.fwogg3r.com",
+      "description": "Password manager. Own login; no Access app so the Bitwarden apps work.",
+      "levels": [
+        "on"
+      ],
+      "cfAccessApp": null,
+      "enforcedBy": "own-login",
+      "order": 70
+    },
+    "photos": {
+      "name": "Photos (Immich)",
+      "url": "https://photos.fwogg3r.com",
+      "description": "Photo library. Own login; no Access app so the iPhone app works.",
+      "levels": [
+        "on"
+      ],
+      "cfAccessApp": null,
+      "enforcedBy": "own-login",
+      "order": 80
+    }
+  }
+}
