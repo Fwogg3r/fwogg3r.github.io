@@ -1,8 +1,144 @@
 rules_version = '2';
 // Firestore security rules for the fwogg3r-team project.
 // Paste into Firebase console -> Firestore Database -> Rules, then Publish.
+// Design and data model: docs/permissions.md
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // ---- helpers ---------------------------------------------------------
+    // Verified email required everywhere. Never enable custom OIDC/SAML providers:
+    // they can assert email_verified for any address.
+    function signedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+    function myEmail() {
+      return request.auth.token.email.lower();
+    }
+    // The owner is hard-coded; there is never a stored "owner" role.
+    function isOwner() {
+      return signedIn() && myEmail() == 'tbryant@fwogg3r.com';
+    }
+    function isSuperadmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(myEmail()))
+        && get(/databases/$(database)/documents/users/$(myEmail())).data.role == 'superadmin';
+    }
+    function isAdmin() {
+      return isOwner() || isSuperadmin();
+    }
+    function hasUserDoc() {
+      return signedIn() && exists(/databases/$(database)/documents/users/$(myEmail()));
+    }
+
+    // ---- service allow-list (MIRRORS services.json; a new service must be added
+    // here too, see CLAUDE.md). Keys are service ids, values are that service's levels.
+    function validGrant(m, id, levels) {
+      return !(id in m) || m[id] in levels;
+    }
+    function validGrants(m) {
+      return m.keys().hasOnly(['files', 'files-smb', 'ha', 'sheila-ssh', 'laptop-ssh', 'rdp', 'agentdash', 'pmjc', 'passwords', 'photos', 'lmstudio'])
+        && m.size() <= 11
+        && validGrant(m, 'files', ['on'])
+        && validGrant(m, 'ha', ['on'])
+        && validGrant(m, 'sheila-ssh', ['on'])
+        && validGrant(m, 'laptop-ssh', ['on'])
+        && validGrant(m, 'agentdash', ['view', 'operate', 'admin'])
+        && validGrant(m, 'pmjc', ['on'])
+        && validGrant(m, 'passwords', ['on'])
+        && validGrant(m, 'photos', ['on'])
+        && validGrant(m, 'files-smb', ['on'])
+        && validGrant(m, 'rdp', ['on'])
+        && validGrant(m, 'lmstudio', ['on']);
+    }
+
+    // High-risk grants (highRisk in services.json): ha, sheila-ssh, laptop-ssh, rdp,
+    // lmstudio, files-smb, pmjc,
+    // agentdash operate/admin. Only the owner may grant, change or revoke them, and a
+    // superadmin may not write (or delete) any doc that holds one, before or after, so
+    // updatedBy on such a doc is always the owner's uid (the sync relies on that).
+    function isHigh(id, v) {
+      return (id in ['ha', 'sheila-ssh', 'laptop-ssh', 'rdp', 'lmstudio', 'files-smb', 'pmjc'] && v != null)
+        || (id == 'agentdash' && v in ['operate', 'admin']);
+    }
+    function hasHigh(m) {
+      return isHigh('ha', m.get('ha', null)) || isHigh('sheila-ssh', m.get('sheila-ssh', null))
+        || isHigh('laptop-ssh', m.get('laptop-ssh', null)) || isHigh('rdp', m.get('rdp', null))
+        || isHigh('lmstudio', m.get('lmstudio', null)) || isHigh('files-smb', m.get('files-smb', null))
+        || isHigh('pmjc', m.get('pmjc', null)) || isHigh('agentdash', m.get('agentdash', null));
+    }
+
+    // Shape of a users/{email} document being written.
+    function validUser(email) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['email', 'role', 'services', 'note', 'updatedAt', 'updatedBy', 'updatedByEmail'])
+        && d.keys().hasAll(['email', 'role', 'services', 'updatedAt', 'updatedBy', 'updatedByEmail'])
+        && d.email is string && d.email == email && email == email.lower()
+        && d.role in ['member', 'superadmin']
+        && d.services is map && validGrants(d.services)
+        && (!('note' in d) || (d.note is string && d.note.size() <= 500))
+        && d.updatedAt == request.time
+        && d.updatedBy == request.auth.uid
+        && d.updatedByEmail == myEmail();
+    }
+
+    // Shape of a services/{id} document being written.
+    function validService() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['name', 'url', 'description', 'levels', 'highRisk', 'highRiskLevels', 'cfAccessApp', 'enforcedBy', 'sso', 'plannedEnforcement', 'order', 'updatedAt', 'updatedBy', 'updatedByEmail'])
+        && d.keys().hasAll(['name', 'levels', 'enforcedBy', 'order', 'updatedAt', 'updatedBy', 'updatedByEmail'])
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 80
+        && (!('url' in d) || d.url == null || (d.url is string && d.url.matches('https://.*')))
+        && (!('description' in d) || (d.description is string && d.description.size() <= 400))
+        && d.levels is list && d.levels.size() >= 1 && d.levels.size() <= 10
+        && (!('highRisk' in d) || d.highRisk is bool)
+        && (!('highRiskLevels' in d) || d.highRiskLevels is list)
+        && (!('cfAccessApp' in d) || d.cfAccessApp == null || d.cfAccessApp is string)
+        && d.enforcedBy in ['cloudflare-access', 'access-oidc', 'warp-gateway', 'own-login', 'agentdash', 'none']
+        && (!('sso' in d) || d.sso in ['access-jwt', 'oidc', 'google-oidc', 'none'])
+        && (!('plannedEnforcement' in d) || d.plannedEnforcement in ['cloudflare-access', 'access-oidc', 'warp-gateway', 'own-login', 'agentdash', 'none'])
+        && d.order is number
+        && d.updatedAt == request.time
+        && d.updatedBy == request.auth.uid
+        && d.updatedByEmail == myEmail();
+    }
+
+    // ---- users/{email}: one doc per person, ID = lowercase email ----------
+    match /users/{email} {
+      // People read their own doc; owner + superadmins read all.
+      allow get: if (signedIn() && myEmail() == email) || isAdmin();
+      allow list: if isAdmin();
+
+      // Superadmin docs (existing or resulting) are owner-only, and only the
+      // owner may write a doc for the owner's own address. The role can never
+      // be "owner" (validUser).
+      allow create: if validUser(email)
+        && (isOwner()
+            || (isSuperadmin()
+                && request.resource.data.role == 'member'
+                && email != 'tbryant@fwogg3r.com'
+                && !hasHigh(request.resource.data.services)));
+      allow update: if validUser(email)
+        && (isOwner()
+            || (isSuperadmin()
+                && resource.data.role == 'member'
+                && request.resource.data.role == 'member'
+                && email != 'tbryant@fwogg3r.com'
+                && !hasHigh(resource.data.services)
+                && !hasHigh(request.resource.data.services)));
+      allow delete: if isOwner()
+        || (isSuperadmin() && resource.data.role == 'member' && !hasHigh(resource.data.services));
+    }
+
+    // ---- services/{id}: the catalog --------------------------------------
+    // Readable by anyone with a users doc (needed to render their links; the
+    // catalog holds public URLs only). Writable by owner + superadmins.
+    match /services/{id} {
+      allow get, list: if isAdmin() || hasUserDoc();
+      allow create, update: if isAdmin() && validService();
+      allow delete: if isAdmin();
+    }
+
+    // ---- nasUsers/{username}: unchanged ----------------------------------
     // One document per TeraStation username, e.g. nasUsers/tbryant.
     // A verified member can read only the document matching their own email
     // (tbryant@fwogg3r.com -> nasUsers/tbryant). Nobody can list or write
@@ -13,5 +149,8 @@ service cloud.firestore {
         && request.auth.token.email.lower() == username + '@fwogg3r.com';
       allow list, write: if false;
     }
+
+    // Server-side readers (the access-sync job on SHEILA) use a read-only
+    // Firebase service account, which bypasses these rules entirely.
   }
 }

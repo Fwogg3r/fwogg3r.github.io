@@ -1,5 +1,7 @@
 // Shared sign-in logic for fwogg3r.com team pages.
-// Only verified @fwogg3r.com email accounts are treated as members.
+// "Member" (paid team membership: billing, TeraStation page) = verified @fwogg3r.com email.
+// Any verified account of any domain can sign in; what it sees on the team page is
+// decided by its users/{email} permission doc (see permissions.js, docs/permissions.md).
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth,
@@ -14,6 +16,8 @@ import {
 import { firebaseConfig } from "./firebase-config.js";
 
 export const ALLOWED_DOMAIN = "fwogg3r.com";
+// Hard-coded owner (also hard-coded in firestore.rules). Never stored as a role.
+export const OWNER_EMAIL = "tbryant@fwogg3r.com";
 
 // Stripe links for the $25/month Team Membership.
 // On localhost the site automatically uses Stripe's sandbox (test mode) links,
@@ -37,7 +41,7 @@ export const configured = !String(firebaseConfig.apiKey).startsWith("REPLACE");
 
 const app = configured ? initializeApp(firebaseConfig) : null;
 export const auth = app ? getAuth(app) : null;
-const db = app ? getFirestore(app) : null;
+export const db = app ? getFirestore(app) : null;
 
 // ---- Remote file access (TeraStation) -------------------------------------
 // The TeraStation's WebAccess is published through a Cloudflare Tunnel at this
@@ -82,20 +86,27 @@ export function isMember(user) {
   return !!user && user.emailVerified === true && isAllowedEmail(user.email);
 }
 
-// Calls cb(user, isMember) whenever sign-in state changes.
-// Any account outside @fwogg3r.com is signed out immediately.
-export function onMemberChange(cb) {
+// Any verified account (any domain). Access to services is decided by permissions.js.
+export function isVerified(user) {
+  return !!user && user.emailVerified === true && !!user.email;
+}
+
+// Calls cb(user, isVerified) whenever sign-in state changes. Unverified accounts count as signed out.
+export function onUserChange(cb) {
   if (!configured) {
     cb(null, false);
     return;
   }
-  onAuthStateChanged(auth, async (user) => {
-    if (user && !isAllowedEmail(user.email)) {
-      await signOut(auth);
-      user = null;
-    }
-    cb(user, isMember(user));
+  onAuthStateChanged(auth, (user) => {
+    cb(user, isVerified(user));
   });
+}
+
+// Calls cb(user, isMember) whenever sign-in state changes.
+// isMember is true only for verified @fwogg3r.com accounts; other accounts are
+// no longer signed out (they may hold service grants) but are never members.
+export function onMemberChange(cb) {
+  onUserChange((user) => cb(user, isMember(user)));
 }
 
 export async function logOut() {
@@ -103,12 +114,27 @@ export async function logOut() {
   window.location.href = "/index.html";
 }
 
-// Protects a page: non-members are sent to the login page.
+// Protects a page for paid-team members (billing, TeraStation): non-members are sent to the login page
+// (or to the team page when signed in with a non-fwogg3r.com account).
 // Reveals the page (removes body.auth-pending) once a member is confirmed.
 export function requireMember(onReady) {
   const here = window.location.pathname;
   onMemberChange((user, member) => {
     if (!member) {
+      if (isVerified(user)) window.location.replace("/members.html");
+      else window.location.replace("/login.html?next=" + encodeURIComponent(here));
+      return;
+    }
+    document.body.classList.remove("auth-pending");
+    if (onReady) onReady(user);
+  });
+}
+
+// Protects a page for any verified account (the team page).
+export function requireUser(onReady) {
+  const here = window.location.pathname;
+  onUserChange((user, ok) => {
+    if (!ok) {
       window.location.replace("/login.html?next=" + encodeURIComponent(here));
       return;
     }
@@ -124,9 +150,10 @@ export function mountUserMenu() {
   wrap.setAttribute("aria-label", "Account");
   document.body.appendChild(wrap);
 
-  onMemberChange((user, member) => {
+  onUserChange((user, signedIn) => {
     wrap.innerHTML = "";
-    if (!member) {
+    const member = isMember(user);
+    if (!signedIn) {
       const a = document.createElement("a");
       a.href = "/login.html";
       a.className = "user-menu-login";
@@ -146,11 +173,8 @@ export function mountUserMenu() {
     menu.className = "user-menu-list";
     menu.hidden = true;
 
-    const items = [
-      ["Members", "/members.html"],
-      ["Files", "/remote/files/"],
-      ["Billing", "/billing.html"],
-    ];
+    const items = [["Team", "/members.html"]];
+    if (member) items.push(["Files", "/remote/files/"], ["Billing", "/billing.html"]);
     for (const [label, href] of items) {
       const a = document.createElement("a");
       a.href = href;

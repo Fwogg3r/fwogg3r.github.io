@@ -1,0 +1,145 @@
+{
+  "_comment": "Schema source for the Firestore services/{id} catalog. Public info only, no secrets. Seeded from the Permissions tab (owner, 'Seed catalog'). See docs/permissions.md.",
+  "services": {
+    "files": {
+      "name": "Team files (browser)",
+      "url": "https://files.fwogg3r.com",
+      "description": "TeraStation WebAccess. Also needs your own TeraStation account. Does not cover network drives.",
+      "levels": [
+        "on"
+      ],
+      "cfAccessApp": "files",
+      "enforcedBy": "cloudflare-access",
+      "order": 10,
+      "sso": "none"
+    },
+    "files-smb": {
+      "name": "Team files (network drives)",
+      "url": null,
+      "description": "SMB drives through the Cloudflare One Client. Needs an enrolled device and a TeraStation account.",
+      "levels": [
+        "on"
+      ],
+      "cfAccessApp": null,
+      "enforcedBy": "warp-gateway",
+      "order": 15,
+      "highRisk": true
+    },
+    "ha": {
+      "name": "Home Assistant",
+      "url": "https://ha.fwogg3r.com",
+      "description": "Smart-home dashboard. Also needs a Home Assistant account (the owner creates it).",
+      "levels": [
+        "on"
+      ],
+      "cfAccessApp": "ha",
+      "enforcedBy": "cloudflare-access",
+      "order": 20,
+      "highRisk": true,
+      "sso": "none"
+    },
+    "sheila-ssh": {
+      "name": "SHEILA SSH",
+      "url": null,
+      "description": "Tunnel access only; you also need an authorized SSH key.",
+      "levels": [
+        "on"
+      ],
+      "cfAccessApp": "sheila-ssh",
+      "enforcedBy": "cloudflare-access",
+      "order": 30,
+      "highRisk": true
+    },
+    "laptop-ssh": {
+      "name": "Laptop SSH",
+      "url": null,
+      "description": "Tunnel access only; you also need an authorized SSH key.",
+      "levels": [
+        "on"
+      ],
+      "cfAccessApp": "laptop-ssh",
+      "enforcedBy": "cloudflare-access",
+      "order": 40,
+      "highRisk": true
+    },
+    "rdp": {
+      "name": "Remote Desktop (SHEILA, laptop)",
+      "url": null,
+      "description": "RDP over the Cloudflare One Client (Gateway policy). Windows login still required.",
+      "levels": [
+        "on"
+      ],
+      "cfAccessApp": null,
+      "enforcedBy": "warp-gateway",
+      "order": 45,
+      "highRisk": true
+    },
+    "agentdash": {
+      "name": "AgentController dashboard",
+      "url": "https://agentdash.fwogg3r.com",
+      "description": "view = read-only, operate = start/stop agents, admin = everything.",
+      "levels": [
+        "view",
+        "operate",
+        "admin"
+      ],
+      "cfAccessApp": "agentdash",
+      "enforcedBy": "agentdash",
+      "order": 50,
+      "highRiskLevels": [
+        "operate",
+        "admin"
+      ],
+      "sso": "access-jwt"
+    },
+    "pmjc": {
+      "name": "pmjc switchboard",
+      "url": "https://pmjc.fwogg3r.com",
+      "description": "Personal MCP job controller (can run commands and send messages as the owner). Own Google login, owner only.",
+      "levels": [
+        "on"
+      ],
+      "cfAccessApp": null,
+      "enforcedBy": "own-login",
+      "order": 60,
+      "highRisk": true,
+      "sso": "google-oidc"
+    },
+    "passwords": {
+      "name": "Passwords (Vaultwarden)",
+      "url": "https://passwords.fwogg3r.com",
+      "description": "Password manager. Own account (the owner invites you); Google sign-in for @fwogg3r.com; no Access app so the Bitwarden apps work.",
+      "levels": [
+        "on"
+      ],
+      "cfAccessApp": null,
+      "enforcedBy": "own-login",
+      "order": 70,
+      "sso": "google-oidc"
+    },
+    "photos": {
+      "name": "Photos (Immich)",
+      "url": "https://photos.fwogg3r.com",
+      "description": "Photo library (Immich). Use 'Login with Cloudflare'; your account is created on first sign-in. Shared albums are by invitation. The iPhone app works too.",
+      "levels": [
+        "on"
+      ],
+      "cfAccessApp": "photos",
+      "enforcedBy": "access-oidc",
+      "order": 80,
+      "sso": "oidc"
+    },
+    "lmstudio": {
+      "name": "Local LLMs (LM Studio)",
+      "url": null,
+      "description": "LM Studio API through the Cloudflare One Client. No API key.",
+      "levels": [
+        "on"
+      ],
+      "cfAccessApp": null,
+      "enforcedBy": "warp-gateway",
+      "order": 90,
+      "highRisk": true
+    }
+  }
+}
