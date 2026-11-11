@@ -100,3 +100,11 @@ Write payload fields: `email`, `role`, `services`, `note`, `updatedAt` (use serv
 | 16 | New id, bad level | owner | services `{rdp: "admin"}` | Deny |
 | 17 | Catalog enforcedBy | owner | set `services/x` with `enforcedBy: "warp-gateway"`, then `"access-oidc"`, then `"none"` (valid shape) | Allow all |
 | 18 | Catalog bad enforcedBy / sso | owner | `enforcedBy: "magic"`; or `sso: "x"` | Deny both |
+
+## Running the rules tests (Firebase emulator, offline)
+
+`docs/rules-test.mjs` runs the test plan above (cases 1-18) plus extra cases (nasUsers, owner identification, shape checks, catalog writes) against the emulator, using the `demo-fwogg3r` project id so nothing touches the real project or console. Last run: 92 passed, 0 failed (firebase-tools 15.35.0, @firebase/rules-unit-testing 6.0.0, firebase 13.2.0, Temurin JRE 21).
+
+1. Needs Java 21+ on PATH (a portable JRE is fine; set `JAVA_HOME`/`PATH` for the command only).
+2. In a scratch folder outside this repo: `npm i --save-exact @firebase/rules-unit-testing@6.0.0 firebase@13.2.0`, put `"type": "module"` in its `package.json`, copy `docs/rules-test.mjs` there as `test.mjs`, and add a `firebase.json` with `{"firestore":{"rules":"<path to firestore.rules>"},"emulators":{"firestore":{"host":"127.0.0.1","port":8080},"ui":{"enabled":false}}}`.
+3. `RULES_FILE=<path to firestore.rules> npx -y firebase-tools@15.35.0 emulators:exec --only firestore --project demo-fwogg3r "node test.mjs"` (exits non-zero on any failure).
