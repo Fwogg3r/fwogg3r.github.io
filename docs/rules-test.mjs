@@ -18,7 +18,9 @@ const ctx = (a, verified = true, extra = {}) =>
   env.authenticatedContext(a.uid, { email: a.email, email_verified: verified, ...extra }).firestore();
 // What Firebase puts in the ID token after a TOTP sign-in (Identity Platform).
 const MFA = { firebase: { sign_in_provider: "password", sign_in_second_factor: "totp", identities: {} } };
-const asOwner = () => ctx(OWNER);
+// The owner must sign in with a second factor to write (isOwnerMfa); asOwnerNoMfa is a password-only session.
+const asOwner = () => ctx(OWNER, true, MFA);
+const asOwnerNoMfa = () => ctx(OWNER);
 const asSa = () => ctx(SA, true, MFA);          // superadmin signed in with a second factor
 const asSaNoMfa = () => ctx(SA);                // superadmin, single-factor session
 const asM = () => ctx(M);
@@ -124,7 +126,7 @@ await t("owner: deletes superadmin doc", "allow", () => deleteDoc(doc(asOwner(),
 await t("owner: deletes high-risk doc", "allow", () => deleteDoc(doc(asOwner(), "users/h@x.com")));
 const MIXED = { uid: "OWNERUID", email: "TBryant@Fwogg3r.com" };
 // the client lowercases the profile email (permissions.js normEmail), so updatedByEmail is lowercase
-await t("owner identified by email+verified: mixed-case token email", "allow", () => setUser(ctx(MIXED), OWNER, "new@x.com"));
+await t("owner identified by email+verified: mixed-case token email", "allow", () => setUser(ctx(MIXED, true, MFA), OWNER, "new@x.com"));
 const EVIL = { uid: "OWNERUID", email: "evil@x.com" };
 await t("owner by uid is not enough (wrong email)", "deny", () => setUser(ctx(EVIL), EVIL, "new@x.com", { role: "superadmin" }));
 await t("unverified owner cannot write", "deny", () => setUser(ctx(OWNER, false), OWNER, "new@x.com"));
@@ -200,9 +202,13 @@ await t("mfa: superadmin with 2nd factor creates member", "allow", () => setUser
 await t("mfa: superadmin with 2nd factor writes catalog", "allow", () => setSvc(asSa(), SA, "x"));
 await t("mfa: superadmin with 2nd factor still cannot touch superadmin", "deny", () => setUser(asSa(), SA, "sa2@x.com", { role: "superadmin" }));
 await t("mfa: claim must be non-null (sign_in_second_factor null)", "deny", () => setUser(ctx(SA, true, { firebase: { sign_in_second_factor: null } }), SA, "new@x.com"));
-await t("mfa: owner without 2nd factor still writes (exempt until enrolled)", "allow", () => setUser(asOwner(), OWNER, "sa@x.com", { role: "superadmin" }));
+await t("mfa: owner without 2nd factor cannot write users", "deny", () => setUser(asOwnerNoMfa(), OWNER, "sa@x.com", { role: "superadmin" }));
+await t("mfa: owner without 2nd factor cannot create member", "deny", () => setUser(asOwnerNoMfa(), OWNER, "new@x.com"));
+await t("mfa: owner without 2nd factor cannot delete", "deny", () => deleteDoc(doc(asOwnerNoMfa(), "users/m@x.com")));
+await t("mfa: owner without 2nd factor can still read", "allow", () => getDocs(collection(asOwnerNoMfa(), "users")));
 await t("mfa: owner with 2nd factor writes", "allow", () => setUser(ctx(OWNER, true, MFA), OWNER, "new@x.com"));
-await t("mfa: owner without 2nd factor writes catalog", "allow", () => setSvc(asOwner(), OWNER, "x"));
+await t("mfa: owner without 2nd factor cannot write catalog", "deny", () => setSvc(asOwnerNoMfa(), OWNER, "x"));
+await t("mfa: owner without 2nd factor cannot delete catalog", "deny", () => deleteDoc(doc(asOwnerNoMfa(), "services/files")));
 await t("mfa: second factor alone does not make a plain member an admin", "deny", () => setUser(ctx(M, true, MFA), M, "new@x.com"));
 
 // Sanity: the harness override really reaches request.auth.token.firebase.sign_in_second_factor.
