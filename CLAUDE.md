@@ -17,3 +17,11 @@ Owner-only services: a catalog entry with `grantable: false` (today `pmjc`) is l
 Other rules: the owner (`tbryant@fwogg3r.com`) is hard-coded in `firestore.rules` and `auth.js` and is never stored as a role; render user-supplied text with `textContent` only; keep the strict CSP on `members.html` (no inline scripts, no Stripe there); never enable custom OIDC/SAML Firebase providers (they can assert `email_verified`).
 
 MFA: TOTP two-step verification lives in `mfa.js` (login second step in `login.html`, Security card in `members.js`); the QR code is drawn locally with `vendor/qrcode-generator.js` (pinned, MIT), never via a third-party service, so keep `members.html` CSP free of new origins. All admin writes (owner and superadmin) in `firestore.rules` require `hasSecondFactor()`; keep `docs/rules-test.mjs` `mfa:` cases and the "MFA" section of `docs/permissions.md` in step.
+
+<!-- roadmap-rule:start (managed by `roadmap agent-rule`) -->
+## Roadmap (keep it current)
+
+- `docs/roadmap/` is this project's roadmap and its single source of truth for planned, active and finished work (WebRoadmap format; view it with `roadmap serve`).
+- **Every change must update the roadmap in the same commit:** set the entry's status when work starts or finishes (`roadmap set ID status=active|done`), add outcomes and numbers to its **Notes**, add entries for new work, ideas or findings (`roadmap add PHASE --title ...`), and fix links (`roadmap link A B`). Run `roadmap check` before committing.
+- This applies to agents and subagents too: a brief or task that changes the project names the roadmap entry it updates.
+<!-- roadmap-rule:end -->
