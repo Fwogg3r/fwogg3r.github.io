@@ -31,13 +31,16 @@ service cloud.firestore {
     function hasSecondFactor() {
       return request.auth.token.firebase.get('sign_in_second_factor', null) != null;
     }
-    // Superadmin WRITES require a second factor. The owner is exempt until they enroll
-    // (then add `&& hasSecondFactor()` to isOwner-based writes too, see docs/permissions.md, "MFA").
+    // Admin WRITES (owner and superadmin) require a second factor. Reads do not.
+    // Recovery if the owner loses the authenticator: Firebase console (bypasses these rules).
+    function isOwnerMfa() {
+      return isOwner() && hasSecondFactor();
+    }
     function isSuperadminMfa() {
       return isSuperadmin() && hasSecondFactor();
     }
     function isAdminMfa() {
-      return isOwner() || isSuperadminMfa();
+      return isOwnerMfa() || isSuperadminMfa();
     }
     function hasUserDoc() {
       return signedIn() && exists(/databases/$(database)/documents/users/$(myEmail()));
@@ -128,20 +131,20 @@ service cloud.firestore {
       // owner may write a doc for the owner's own address. The role can never
       // be "owner" (validUser).
       allow create: if validUser(email)
-        && (isOwner()
+        && (isOwnerMfa()
             || (isSuperadminMfa()
                 && request.resource.data.role == 'member'
                 && email != 'tbryant@fwogg3r.com'
                 && !hasHigh(request.resource.data.services)));
       allow update: if validUser(email)
-        && (isOwner()
+        && (isOwnerMfa()
             || (isSuperadminMfa()
                 && resource.data.role == 'member'
                 && request.resource.data.role == 'member'
                 && email != 'tbryant@fwogg3r.com'
                 && !hasHigh(resource.data.services)
                 && !hasHigh(request.resource.data.services)));
-      allow delete: if isOwner()
+      allow delete: if isOwnerMfa()
         || (isSuperadminMfa() && resource.data.role == 'member' && !hasHigh(resource.data.services));
     }
 

@@ -70,12 +70,17 @@ The team page only hides links; it is not the security boundary. What a grant do
 
 Follow the checklist in `CLAUDE.md`: `services.json`, the Firestore catalog (re-seed or edit in the tab), the `firestore.rules` allow-list (and high-risk helpers), the enforcement, and this doc.
 
-## Owner to-do in the Firebase console (not done by the repo)
+## Firebase project setup (done 2026-11-11)
 
-1. Authentication, Sign-in method: keep Email/Password, enable **Google**. Authentication, Settings, Authorized domains must include fwogg3r.com.
-2. Upgrade to Identity Platform (Authentication, Settings or the upgrade prompt), then Authentication, Sign-in method, **Multi-factor authentication**: enable it with **TOTP** (SMS stays off). Then enroll the owner on the Team page (Security card). See "MFA" below.
+All done; kept as the checklist for rebuilding the project.
+
+1. Authentication, Sign-in method: Email/Password and **Google** enabled. Authentication, Settings, Authorized domains includes fwogg3r.com.
+2. Identity Platform enabled (works on the Spark plan). **TOTP cannot be turned on in the console** (its Multi-factor section only offers SMS); it is set through the Identity Toolkit admin API, e.g. from Cloud Shell:
+   `curl -X PATCH "https://identitytoolkit.googleapis.com/admin/v2/projects/fwogg3r-team/config?updateMask=mfa.providerConfigs" -H "Authorization: Bearer $(gcloud auth print-access-token)" -H "X-Goog-User-Project: fwogg3r-team" -H "Content-Type: application/json" -d '{"mfa":{"providerConfigs":[{"state":"ENABLED","totpProviderConfig":{"adjacentIntervals":5}}]}}'`
+   The reply's top-level `mfa.state` stays `DISABLED`: that is SMS, which stays off.
 3. Publish `firestore.rules` (Firestore, Rules).
 4. Sign in as the owner, open Team, Permissions, **Seed catalog**.
+5. The owner enrolled TOTP on the Team page (Security card).
 
 ## MFA (two-step verification, TOTP)
 
@@ -88,8 +93,8 @@ Client code: `mfa.js` (helpers), `login.html` (second step of sign-in), `members
 **Sign in:** email/password or Google, then the page asks for the 6-digit code. Works the same for both.
 
 **Enforcement:**
-- Client: the Permissions tab shows a warning banner when the admin has no second factor. A **superadmin** without an active second factor (none enrolled, or this session started without it) has every management control disabled.
-- Rules: `firestore.rules` requires `request.auth.token.firebase.sign_in_second_factor != null` (`hasSecondFactor()`) for all **superadmin writes** (users create/update/delete, catalog writes and deletes). Reads are unaffected. The **owner is exempt until they enroll**; once the owner has MFA, make it mandatory by adding `&& hasSecondFactor()` to the owner branches (`isOwner()` in the users rules and in `isAdminMfa()`). Do this only after confirming a sign-in with a code works; the Firebase console and the read-only sync service account bypass the rules, so a mistake is recoverable there.
+- Client: an **admin (owner or superadmin)** without an active second factor (none enrolled, or this session started without it) has every management control disabled, with a banner saying why.
+- Rules: `firestore.rules` requires `request.auth.token.firebase.sign_in_second_factor != null` (`hasSecondFactor()`) for **all admin writes, owner included** (`isOwnerMfa()` / `isSuperadminMfa()`: users create/update/delete, catalog writes and deletes). Reads are unaffected. The Firebase console and the read-only sync service account bypass the rules, so a lost authenticator is recoverable there (see Recovery).
 - Tests: `docs/rules-test.mjs` has `mfa:` cases (token claim `firebase: {sign_in_second_factor: "totp"}`).
 
 **Recovery:**
@@ -125,7 +130,7 @@ Write payload fields: `email`, `role`, `services`, `note`, `updatedAt` (use serv
 
 ## Running the rules tests (Firebase emulator, offline)
 
-`docs/rules-test.mjs` runs the test plan above (cases 1-18) plus extra cases (nasUsers, owner identification, shape checks, catalog writes) against the emulator, using the `demo-fwogg3r` project id so nothing touches the real project or console. Last run: 123 passed, 0 failed (includes the pmjc owner-only cases and two `sanity:` cases that fail if the MFA claim override stops reaching `request.auth.token.firebase.sign_in_second_factor`) (firebase-tools 15.35.0, @firebase/rules-unit-testing 6.0.0, firebase 13.2.0, Temurin JRE 21).
+`docs/rules-test.mjs` runs the test plan above (cases 1-18) plus extra cases (nasUsers, owner identification, shape checks, catalog writes) against the emulator, using the `demo-fwogg3r` project id so nothing touches the real project or console. Last run: 127 passed, 0 failed (includes the owner-needs-MFA cases, the pmjc owner-only cases and two `sanity:` cases that fail if the MFA claim override stops reaching `request.auth.token.firebase.sign_in_second_factor`) (firebase-tools 15.35.0, @firebase/rules-unit-testing 6.0.0, firebase 13.2.0, Temurin JRE 21).
 
 1. Needs Java 21+ on PATH (a portable JRE is fine; set `JAVA_HOME`/`PATH` for the command only).
 2. In a scratch folder outside this repo: `npm i --save-exact @firebase/rules-unit-testing@6.0.0 firebase@13.2.0`, put `"type": "module"` in its `package.json`, copy `docs/rules-test.mjs` there as `test.mjs`, and add a `firebase.json` with `{"firestore":{"rules":"<path to firestore.rules>"},"emulators":{"firestore":{"host":"127.0.0.1","port":8080},"ui":{"enabled":false}}}`.

@@ -43,10 +43,10 @@ const MANUAL_NOTE = {
 const safeUrl = (u) => (typeof u === "string" && /^https:\/\//.test(u) ? u : null);
 
 let me, profile, catalog = [];
-// A superadmin without an active second factor may not manage anything (firestore.rules requires it
-// for superadmin writes too). The owner only gets a warning until they enroll.
+// An admin (owner or superadmin) without an active second factor may not manage anything:
+// firestore.rules requires it for every admin write (isOwnerMfa / isSuperadminMfa).
 let mfaActive = false;
-const mfaBlocked = () => profile.role === "superadmin" && !mfaActive;
+const mfaBlocked = () => isAdmin(profile) && !mfaActive;
 const MFA_BLOCK_HINT = "Turn on two-step verification (Services tab, Security) and sign in again with your code to manage the allowlist.";
 
 // "Active" = this session's token carries a second-factor sign-in (what the rules check).
@@ -79,7 +79,7 @@ function renderSecurity() {
   if (admin && !totp.length) {
     warn.hidden = false;
     warn.textContent = profile.role === "owner"
-      ? "Your account can change who has access to everything, and it has no second factor. Set up two-step verification now."
+      ? "Your account can change who has access to everything, and it has no second factor. Admin actions are disabled until you set up two-step verification."
       : "Superadmin actions are disabled until you set up two-step verification.";
   } else if (admin && totp.length && !mfaActive) {
     warn.hidden = false;
